@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试笔记数量</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 10px; }
+        button:hover { background: #0056b3; }
+        .result { margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 4px; white-space: pre-wrap; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 测试笔记获取数量</h1>
+        
+        <button onclick="testCount('护肤')">测试护肤</button>
+        <button onclick="testCount('美妆')">测试美妆</button>
+        <button onclick="testCount('穿搭')">测试穿搭</button>
+        
+        <div id="result" class="result" style="display: none;"></div>
+    </div>
+
+    <script>
+        async function testCount(keyword) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = `正在测试关键词"${keyword}"...`;
+            resultDiv.className = 'result';
+            
+            try {
+                const startTime = Date.now();
+                const response = await fetch('/api/analyze-hot-posts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ keyword: keyword })
+                });
+                const endTime = Date.now();
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // 从raw_data中提取笔记数量信息
+                const rawData = data.raw_data || '';
+                const countMatch = rawData.match(/实际获取(\d+)篇/);
+                const actualCount = countMatch ? countMatch[1] : '未知';
+                
+                // 计算笔记条目数量
+                const noteLines = rawData.split('\n').filter(line => line.match(/^\d+\./));
+                const noteCount = noteLines.length;
+                
+                let result = `✅ 测试成功！\n\n`;
+                result += `关键词: ${keyword}\n`;
+                result += `响应时间: ${((endTime - startTime) / 1000).toFixed(1)}秒\n`;
+                result += `API返回状态: ${data.success ? '成功' : '失败'}\n`;
+                result += `声明获取数量: ${actualCount}篇\n`;
+                result += `实际解析条目: ${noteCount}条\n`;
+                result += `分析规律数量: ${data.rules ? data.rules.length : 0}条\n\n`;
+                
+                if (noteCount > 0) {
+                    result += `前5条笔记预览:\n`;
+                    noteLines.slice(0, 5).forEach((line, index) => {
+                        result += `${index + 1}. ${line.substring(0, 50)}...\n`;
+                    });
+                }
+                
+                resultDiv.textContent = result;
+                resultDiv.className = 'result success';
+                
+            } catch (error) {
+                resultDiv.textContent = `❌ 测试失败: ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+    </script>
+</body>
+</html>

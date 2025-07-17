@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API测试页面</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px; white-space: pre-wrap; }
+        .error { background: #f8d7da; color: #721c24; }
+        .success { background: #d4edda; color: #155724; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 AI小红书文案生成器 - API测试</h1>
+        
+        <div class="test-section">
+            <h2>1. 测试热门分析接口</h2>
+            <button onclick="testAnalyze()">测试 /api/analyze-hot-posts</button>
+            <div id="analyze-result" class="result" style="display: none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>2. 测试内容生成接口</h2>
+            <button onclick="testGenerate()">测试 /api/generate-content</button>
+            <div id="generate-result" class="result" style="display: none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>3. 测试完整流程</h2>
+            <button onclick="testFullFlow()">测试完整流程</button>
+            <div id="flow-result" class="result" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        async function testAnalyze() {
+            const resultDiv = document.getElementById('analyze-result');
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = '正在测试...';
+            resultDiv.className = 'result';
+            
+            try {
+                const response = await fetch('/api/analyze-hot-posts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ keyword: '护肤' })
+                });
+                
+                const data = await response.json();
+                resultDiv.textContent = `状态: ${response.status}\n响应: ${JSON.stringify(data, null, 2)}`;
+                resultDiv.className = 'result ' + (response.ok ? 'success' : 'error');
+            } catch (error) {
+                resultDiv.textContent = `错误: ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+        
+        async function testGenerate() {
+            const resultDiv = document.getElementById('generate-result');
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = '正在测试...';
+            resultDiv.className = 'result';
+            
+            try {
+                const response = await fetch('/api/generate-content', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        keyword: '护肤',
+                        user_info: '我是一个护肤爱好者，想分享一些护肤心得',
+                        hot_post_rules: []
+                    })
+                });
+                
+                const data = await response.json();
+                resultDiv.textContent = `状态: ${response.status}\n响应: ${JSON.stringify(data, null, 2)}`;
+                resultDiv.className = 'result ' + (response.ok ? 'success' : 'error');
+            } catch (error) {
+                resultDiv.textContent = `错误: ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+        
+        async function testFullFlow() {
+            const resultDiv = document.getElementById('flow-result');
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = '正在测试完整流程...\n';
+            resultDiv.className = 'result';
+            
+            try {
+                // 第一步：分析热门笔记
+                resultDiv.textContent += '步骤1: 分析热门笔记...\n';
+                const analyzeResponse = await fetch('/api/analyze-hot-posts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ keyword: '护肤' })
+                });
+                
+                if (!analyzeResponse.ok) {
+                    throw new Error(`分析接口失败: ${analyzeResponse.status}`);
+                }
+                
+                const analysisResult = await analyzeResponse.json();
+                resultDiv.textContent += `✅ 分析完成，获得${analysisResult.rules?.length || 0}条规律\n\n`;
+                
+                // 第二步：生成内容
+                resultDiv.textContent += '步骤2: 生成内容...\n';
+                const generateResponse = await fetch('/api/generate-content', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        hot_post_rules: analysisResult.rules,
+                        user_info: '我是一个护肤爱好者，想分享一些护肤心得和好用的产品',
+                        keyword: '护肤'
+                    })
+                });
+                
+                if (!generateResponse.ok) {
+                    throw new Error(`生成接口失败: ${generateResponse.status}`);
+                }
+                
+                const generatedContent = await generateResponse.json();
+                resultDiv.textContent += `✅ 内容生成完成！\n\n`;
+                resultDiv.textContent += `生成的标题: ${generatedContent.title?.[0] || '无'}\n`;
+                resultDiv.textContent += `关键词数量: ${generatedContent.keywords?.length || 0}\n`;
+                resultDiv.textContent += `是否使用备用模板: ${generatedContent.metadata?.fallback ? '是' : '否'}\n\n`;
+                resultDiv.textContent += `🎉 完整流程测试成功！`;
+                
+                resultDiv.className = 'result success';
+            } catch (error) {
+                resultDiv.textContent += `❌ 测试失败: ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+    </script>
+</body>
+</html>
