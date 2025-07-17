@@ -124,7 +124,7 @@ export function detectSensitiveWords(text: string): {
   
   return {
     hasSensitiveWords: detectedWords.length > 0,
-    detectedWords: [...new Set(detectedWords)], // 去重
+    detectedWords: Array.from(new Set(detectedWords)), // 去重
     positions
   };
 }
