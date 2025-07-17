@@ -40,9 +40,19 @@ export function getEnvVar(envVar: string, defaultValue: string = ''): string {
  * @returns Response对象
  */
 export function createApiResponse(data: any, status: number = 200): Response {
+  // 安全的CORS配置
+  const allowedOrigin = process.env.NODE_ENV === 'production'
+    ? (process.env.PRODUCTION_URL || 'https://xhs-ai-writer.vercel.app')
+    : '*';
+
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': allowedOrigin,
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
   });
 }
 
@@ -58,6 +68,11 @@ export function createErrorResponse(
   status: number = 500,
   details?: string
 ): Response {
+  // 安全的CORS配置
+  const allowedOrigin = process.env.NODE_ENV === 'production'
+    ? (process.env.PRODUCTION_URL || 'https://xhs-ai-writer.vercel.app')
+    : '*';
+
   return new Response(
     JSON.stringify({
       error,
@@ -66,7 +81,12 @@ export function createErrorResponse(
     }),
     {
       status,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': allowedOrigin,
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
     }
   );
 }

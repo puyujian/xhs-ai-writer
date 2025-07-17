@@ -92,12 +92,17 @@ export async function POST(request: Request) {
       }
     });
 
+    // 安全的CORS配置
+    const allowedOrigin = process.env.NODE_ENV === 'production'
+      ? (process.env.PRODUCTION_URL || 'https://xhs-ai-writer.vercel.app')
+      : '*';
+
     return new Response(stream, {
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': allowedOrigin,
         'Access-Control-Allow-Methods': 'POST',
         'Access-Control-Allow-Headers': 'Content-Type',
       },

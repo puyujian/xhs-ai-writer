@@ -186,7 +186,7 @@ export default function Home() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          hot_post_rules: analysisResult.rules,
+          hot_post_rules: analysisResult.analysis,
           user_info: userInfo,
           keyword,
         }),

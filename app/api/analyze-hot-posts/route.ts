@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { XhsNoteItem, XhsApiResponse, ProcessedNote } from '@/lib/types';
 import { getAnalysisPrompt } from '@/lib/prompts';
 import { ERROR_MESSAGES, CONFIG, API_ENDPOINTS, XHS_CONFIG, HTTP_STATUS } from '@/lib/constants';
@@ -87,13 +86,40 @@ async function scrapeHotPosts(keyword: string): Promise<string> {
         image_formats: ["jpg", "webp", "avif"]
       };
 
-      const response = await axios.post(apiUrl, requestData, {
-        headers,
-        timeout: 15000,
-        validateStatus: (status) => status < 500
-      });
+      // 创建AbortController用于超时控制
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-      return response;
+      try {
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(requestData),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        // 检查响应状态（允许4xx和5xx状态码通过，与axios的validateStatus行为一致）
+        if (response.status >= 500) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        // 解析JSON响应
+        const data = await response.json();
+
+        // 返回与axios兼容的响应格式
+        return {
+          status: response.status,
+          data: data
+        };
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new Error('请求超时');
+        }
+        throw error;
+      }
     };
 
     // 设置正确的请求头 - 参考专业项目
@@ -263,23 +289,12 @@ export async function POST(request: Request) {
       ['titleFormulas', 'contentStructure', 'tagStrategy', 'coverStyleAnalysis']
     );
 
-    // 为了保持向后兼容，同时提供新旧格式
-    const compatibleRules = [
-      `标题公式: ${analysisResult.titleFormulas?.analysis || ''}`,
-      `开头策略: ${analysisResult.contentStructure?.openingHooks?.length || 0}种开头方式`,
-      `正文模板: ${analysisResult.contentStructure?.bodyTemplate || ''}`,
-      `结尾策略: ${analysisResult.contentStructure?.endingHooks?.length || 0}种结尾方式`,
-      `标签策略: ${analysisResult.tagStrategy?.strategy || ''}`
-    ];
-
     return createApiResponse({
       success: true,
       keyword,
-      // 保持向后兼容的字段
-      rules: compatibleRules,
+      // 直接返回完整的分析结果
+      analysis: analysisResult,
       summary: `基于${keyword}热门笔记的深度分析，提取了${analysisResult.titleFormulas?.suggestedFormulas?.length || 0}个标题公式、${analysisResult.contentStructure?.openingHooks?.length || 0}种开头方式、${analysisResult.coverStyleAnalysis?.commonStyles?.length || 0}种封面风格等实用策略。`,
-      // 新的详细分析结果
-      detailedAnalysis: analysisResult,
       raw_data: scrapedContent
     });
 
