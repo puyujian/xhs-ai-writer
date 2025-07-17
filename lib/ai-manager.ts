@@ -8,6 +8,9 @@ import { getEnvVar, safeJsonParse } from './utils';
 import { CONFIG } from './constants';
 import { BusinessError } from './error-handler';
 
+// 调试日志控制
+const debugLoggingEnabled = process.env.ENABLE_DEBUG_LOGGING === 'true';
+
 /**
  * AI响应验证结果
  */
@@ -92,8 +95,10 @@ export class AIManager {
     }
 
     // 添加调试信息
-    console.log(`🔍 AI响应内容长度: ${content.length} 字符`);
-    console.log(`🔍 AI响应前100字符: ${content.substring(0, 100)}...`);
+    if (debugLoggingEnabled) {
+      console.log(`🔍 AI响应内容长度: ${content.length} 字符`);
+      console.log(`🔍 AI响应前100字符: ${content.substring(0, 100)}...`);
+    }
 
     const parsed = safeJsonParse(content, null);
     if (parsed === null) {
@@ -102,7 +107,9 @@ export class AIManager {
       return { isValid: false, data: null, errors };
     }
 
-    console.log(`✅ JSON解析成功，包含字段: ${Object.keys(parsed).join(', ')}`);
+    if (debugLoggingEnabled) {
+      console.log(`✅ JSON解析成功，包含字段: ${Object.keys(parsed).join(', ')}`);
+    }
 
     // 检查必需字段
     for (const field of expectedFields) {
@@ -115,7 +122,7 @@ export class AIManager {
     if (expectedFields.includes('rules')) {
       if (!Array.isArray(parsed.rules) || parsed.rules.length === 0) {
         errors.push('rules字段应该是非空数组');
-      } else {
+      } else if (debugLoggingEnabled) {
         console.log(`✅ rules数组包含 ${parsed.rules.length} 个规律`);
       }
     }
@@ -155,7 +162,7 @@ export class AIManager {
 
     if (!Array.isArray(titleFormulas.suggestedFormulas) || titleFormulas.suggestedFormulas.length === 0) {
       errors.push('titleFormulas.suggestedFormulas应该是非空数组');
-    } else {
+    } else if (debugLoggingEnabled) {
       console.log(`✅ 标题公式包含 ${titleFormulas.suggestedFormulas.length} 个公式`);
     }
 
@@ -185,7 +192,9 @@ export class AIManager {
       errors.push('contentStructure.bodyTemplate应该是字符串');
     }
 
-    console.log(`✅ 内容结构验证通过：${contentStructure.openingHooks?.length || 0}个开头，${contentStructure.endingHooks?.length || 0}个结尾`);
+    if (debugLoggingEnabled) {
+      console.log(`✅ 内容结构验证通过：${contentStructure.openingHooks?.length || 0}个开头，${contentStructure.endingHooks?.length || 0}个结尾`);
+    }
   }
 
   /**
@@ -201,7 +210,9 @@ export class AIManager {
       errors.push('tagStrategy.commonTags应该是数组');
     }
 
-    console.log(`✅ 标签策略验证通过：${tagStrategy.commonTags?.length || 0}个常用标签`);
+    if (debugLoggingEnabled) {
+      console.log(`✅ 标签策略验证通过：${tagStrategy.commonTags?.length || 0}个常用标签`);
+    }
   }
 
   /**
@@ -217,7 +228,9 @@ export class AIManager {
       errors.push('coverStyleAnalysis.commonStyles应该是非空数组');
     }
 
-    console.log(`✅ 封面风格分析验证通过：${coverStyleAnalysis.commonStyles?.length || 0}个风格`);
+    if (debugLoggingEnabled) {
+      console.log(`✅ 封面风格分析验证通过：${coverStyleAnalysis.commonStyles?.length || 0}个风格`);
+    }
   }
 
   /**
@@ -253,7 +266,9 @@ export class AIManager {
           throw new Error(`AI响应验证失败: ${validation.errors.join(', ')}`);
         }
 
-        console.log('✅ AI分析成功');
+        if (debugLoggingEnabled) {
+          console.log('✅ AI分析成功');
+        }
         return validation.data;
 
       } catch (error) {
@@ -314,7 +329,9 @@ export class AIManager {
           throw new Error('AI没有返回任何内容');
         }
 
-        console.log('✅ 流式生成成功');
+        if (debugLoggingEnabled) {
+          console.log('✅ 流式生成成功');
+        }
         return;
 
       } catch (error) {

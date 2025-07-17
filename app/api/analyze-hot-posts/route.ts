@@ -5,24 +5,33 @@ import { generateTraceId, createApiResponse, createErrorResponse, getEnvVar } fr
 import { getCacheData, saveCacheData, getFallbackCacheData } from '@/lib/cache-manager';
 import { aiManager } from '@/lib/ai-manager';
 
+// 调试日志控制
+const debugLoggingEnabled = process.env.ENABLE_DEBUG_LOGGING === 'true';
+
 // AI交互现在通过aiManager统一管理
 
 // 智能数据获取函数 - 优先使用缓存，失败时降级到备用缓存
 async function fetchHotPostsWithCache(keyword: string): Promise<string> {
   const cacheEnabled = process.env.ENABLE_CACHE !== 'false';
-  console.log(`🔍 开始获取关键词"${keyword}"的热门笔记数据 (缓存: ${cacheEnabled ? '启用' : '禁用'})`);
+  if (debugLoggingEnabled) {
+    console.log(`🔍 开始获取关键词"${keyword}"的热门笔记数据 (缓存: ${cacheEnabled ? '启用' : '禁用'})`);
+  }
 
   // 1. 首先尝试读取有效缓存（如果启用）
   const cachedData = await getCacheData(keyword);
   if (cachedData) {
-    console.log(`✅ 使用缓存数据: ${keyword} (${cachedData.processedNotes.length}条笔记)`);
+    if (debugLoggingEnabled) {
+      console.log(`✅ 使用缓存数据: ${keyword} (${cachedData.processedNotes.length}条笔记)`);
+    }
     return cachedData.data;
   }
 
   // 2. 尝试爬取新数据
   try {
     const scrapedData = await scrapeHotPosts(keyword);
-    console.log(`✅ 爬取成功: ${keyword}`);
+    if (debugLoggingEnabled) {
+      console.log(`✅ 爬取成功: ${keyword}`);
+    }
     return scrapedData;
   } catch (scrapeError) {
     console.warn(`⚠️ 爬取失败: ${scrapeError instanceof Error ? scrapeError.message : '未知错误'}`);
@@ -30,7 +39,9 @@ async function fetchHotPostsWithCache(keyword: string): Promise<string> {
     // 3. 爬取失败，尝试使用同分类的备用缓存
     const fallbackData = await getFallbackCacheData(keyword);
     if (fallbackData) {
-      console.log(`🔄 使用备用缓存: ${fallbackData.keyword} -> ${keyword}`);
+      if (debugLoggingEnabled) {
+        console.log(`🔄 使用备用缓存: ${fallbackData.keyword} -> ${keyword}`);
+      }
       return fallbackData.data;
     }
 
@@ -159,10 +170,12 @@ async function scrapeHotPosts(keyword: string): Promise<string> {
       const data: XhsApiResponse = response.data;
 
       // 添加详细的调试信息
-      console.log(`📊 第${currentPage}页API响应状态:`, response.status);
-      console.log(`📊 API响应成功标志:`, data.success);
-      console.log(`📊 API响应消息:`, data.msg);
-      console.log(`📊 返回的items数量:`, data.data?.items?.length || 0);
+      if (debugLoggingEnabled) {
+        console.log(`📊 第${currentPage}页API响应状态:`, response.status);
+        console.log(`📊 API响应成功标志:`, data.success);
+        console.log(`📊 API响应消息:`, data.msg);
+        console.log(`📊 返回的items数量:`, data.data?.items?.length || 0);
+      }
 
       // 检查API响应结构
       if (!data.success) {
@@ -177,7 +190,7 @@ async function scrapeHotPosts(keyword: string): Promise<string> {
       const pageNotes = data.data.items.filter((item: XhsNoteItem) => item.model_type === "note");
 
       // 调试第一个笔记的数据结构
-      if (data.data.items.length > 0 && currentPage === 1) {
+      if (debugLoggingEnabled && data.data.items.length > 0 && currentPage === 1) {
         const firstItem = data.data.items[0];
         console.log(`🔍 第一个item的完整数据结构:`, JSON.stringify(firstItem, null, 2));
 
