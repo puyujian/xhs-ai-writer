@@ -26,7 +26,7 @@ export async function POST(request: Request) {
       async start(controller) {
         // 内容清洗标志位
         let contentStarted = false;
-        const startMarker = "## 1. 爆款标题创作";
+        const startMarker = "## 1."; // 使用更宽松的匹配，只匹配开头部分
         let accumulatedContent = ""; // 累积内容，用于检测开始标记
 
         // 使用AI管理器的流式生成（带重试机制）
