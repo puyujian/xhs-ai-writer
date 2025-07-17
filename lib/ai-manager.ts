@@ -317,11 +317,21 @@ export class AIManager {
         });
 
         let hasContent = false;
+        let lastChunkTime = Date.now();
+
         for await (const chunk of response) {
           const content = chunk.choices[0]?.delta?.content || '';
           if (content) {
             hasContent = true;
+            lastChunkTime = Date.now();
             onChunk(content);
+          } else {
+            // 心跳机制：如果超过500ms没有内容，发送一个空的心跳
+            const now = Date.now();
+            if (now - lastChunkTime > 500) {
+              onChunk(''); // 发送空内容作为心跳
+              lastChunkTime = now;
+            }
           }
         }
 

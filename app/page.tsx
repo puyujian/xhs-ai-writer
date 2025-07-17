@@ -36,6 +36,11 @@ export default function Home() {
   const [retryCount, setRetryCount] = useState(0)
   const abortControllerRef = useRef<AbortController | null>(null)
 
+  // 模拟打字机相关状态
+  const chunkQueueRef = useRef<string[]>([]) // 数据块队列
+  const typewriterIntervalRef = useRef<NodeJS.Timeout | null>(null) // 打字机定时器
+  const [displayContent, setDisplayContent] = useState('') // 当前显示的内容
+
   // 实时解析和分割内容的 Effect
   useEffect(() => {
     // 解析四个部分：标题、正文、标签、AI绘画提示词
@@ -117,12 +122,51 @@ export default function Home() {
       return { titles, body, tags, imagePrompt };
     };
 
-    const parsed = parseContent(streamContent);
+    const parsed = parseContent(displayContent);
     setGeneratedTitles(parsed.titles);
     setGeneratedBody(parsed.body);
     setGeneratedTags(parsed.tags);
     setGeneratedImagePrompt(parsed.imagePrompt);
-  }, [streamContent]);
+  }, [displayContent]);
+
+  // 启动打字机效果
+  const startTypewriter = useCallback(() => {
+    if (typewriterIntervalRef.current) {
+      clearInterval(typewriterIntervalRef.current);
+    }
+
+    typewriterIntervalRef.current = setInterval(() => {
+      if (chunkQueueRef.current.length > 0) {
+        // 从队列中取出一小块内容
+        const chunk = chunkQueueRef.current.shift()!;
+        setDisplayContent(prev => prev + chunk);
+      }
+    }, 20); // 每20毫秒更新一次，创造平滑的打字机效果
+  }, []);
+
+  // 停止打字机效果
+  const stopTypewriter = useCallback(() => {
+    if (typewriterIntervalRef.current) {
+      clearInterval(typewriterIntervalRef.current);
+      typewriterIntervalRef.current = null;
+    }
+
+    // 清空剩余队列，立即显示所有内容
+    if (chunkQueueRef.current.length > 0) {
+      const remainingContent = chunkQueueRef.current.join('');
+      chunkQueueRef.current = [];
+      setDisplayContent(prev => prev + remainingContent);
+    }
+  }, []);
+
+  // 清理函数
+  useEffect(() => {
+    return () => {
+      if (typewriterIntervalRef.current) {
+        clearInterval(typewriterIntervalRef.current);
+      }
+    };
+  }, []);
 
   const handleGenerate = async () => {
     if (!keyword.trim() || !userInfo.trim()) {
@@ -135,10 +179,15 @@ export default function Home() {
     setLoadingStage('analyzing')
     setError(null)
     setStreamContent('')
+    setDisplayContent('') // 清空显示内容
     setGeneratedTitles('')
     setGeneratedBody('')
     setGeneratedTags([])
     setGeneratedImagePrompt('')
+
+    // 清空队列和停止之前的打字机
+    chunkQueueRef.current = []
+    stopTypewriter()
 
     // 创建新的AbortController
     abortControllerRef.current = new AbortController()
@@ -186,6 +235,9 @@ export default function Home() {
       const decoder = new TextDecoder()
 
       if (reader) {
+        // 启动打字机效果
+        startTypewriter()
+
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
@@ -197,6 +249,8 @@ export default function Home() {
             if (line.startsWith('data: ')) {
               const data = line.slice(6)
               if (data === '[DONE]') {
+                // 停止打字机并显示剩余内容
+                stopTypewriter()
                 setLoading(false)
                 setLoadingStage('')
                 return
@@ -205,6 +259,18 @@ export default function Home() {
               try {
                 const parsed = JSON.parse(data)
                 if (parsed.content) {
+                  // 将内容添加到队列中，而不是直接更新UI
+                  // 将内容分割成更小的块以获得更平滑的效果
+                  const contentChunks = parsed.content.split('').reduce((acc: string[], char: string, index: number) => {
+                    const chunkIndex = Math.floor(index / 3) // 每3个字符一组
+                    if (!acc[chunkIndex]) acc[chunkIndex] = ''
+                    acc[chunkIndex] += char
+                    return acc
+                  }, [])
+
+                  chunkQueueRef.current.push(...contentChunks)
+
+                  // 同时更新完整内容用于备份
                   setStreamContent(prev => prev + parsed.content)
                 } else if (parsed.error) {
                   throw new Error(parsed.error)
@@ -217,6 +283,9 @@ export default function Home() {
         }
       }
     } catch (err) {
+      // 出错时停止打字机
+      stopTypewriter()
+
       if (err instanceof Error && err.name === 'AbortError') {
         const errorInfo = formatErrorForUser('生成已取消');
         setError(errorInfo);
@@ -237,16 +306,24 @@ export default function Home() {
       setLoading(false)
       setLoadingStage('')
     }
+    // 停止打字机效果
+    stopTypewriter()
   }
 
   const handleRetry = () => {
     setRetryCount(prev => prev + 1);
     setError(null);
     setStreamContent('');
+    setDisplayContent(''); // 清空显示内容
     setGeneratedTitles('');
     setGeneratedBody('');
     setGeneratedTags([]);
     setGeneratedImagePrompt('');
+
+    // 清理打字机状态
+    chunkQueueRef.current = []
+    stopTypewriter()
+
     handleGenerate();
   }
 
