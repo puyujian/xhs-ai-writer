@@ -40,9 +40,6 @@ export default function Home() {
   useEffect(() => {
     // 解析四个部分：标题、正文、标签、AI绘画提示词
     const parseContent = (content: string) => {
-      // 添加调试日志
-      console.log('🔍 开始解析内容，内容长度:', content.length);
-      console.log('🔍 内容前200字符:', content.substring(0, 200));
 
       // 定义各部分的正则表达式
       const titleRegex = /##\s*1[.、]?\s*(爆款标题创作|标题|生成标题)(\s*（\d+个）)?/i;
@@ -56,87 +53,64 @@ export default function Home() {
       const tagsMatch = content.match(tagsRegex);
       const imagePromptMatch = content.match(imagePromptRegex);
 
-      // 添加调试日志
-      console.log('🔍 正则匹配结果:');
-      console.log('  - titleMatch:', titleMatch ? `找到: ${titleMatch[0]}` : '未找到');
-      console.log('  - bodyMatch:', bodyMatch ? `找到: ${bodyMatch[0]}` : '未找到');
-      console.log('  - tagsMatch:', tagsMatch ? `找到: ${tagsMatch[0]}` : '未找到');
-      console.log('  - imagePromptMatch:', imagePromptMatch ? `找到: ${imagePromptMatch[0]}` : '未找到');
+
 
       // 创建位置数组并排序
       const sections = [
-        { name: 'title', match: titleMatch, index: titleMatch?.index || -1 },
-        { name: 'body', match: bodyMatch, index: bodyMatch?.index || -1 },
-        { name: 'tags', match: tagsMatch, index: tagsMatch?.index || -1 },
-        { name: 'imagePrompt', match: imagePromptMatch, index: imagePromptMatch?.index || -1 }
+        { name: 'title', match: titleMatch, index: titleMatch?.index ?? -1 },
+        { name: 'body', match: bodyMatch, index: bodyMatch?.index ?? -1 },
+        { name: 'tags', match: tagsMatch, index: tagsMatch?.index ?? -1 },
+        { name: 'imagePrompt', match: imagePromptMatch, index: imagePromptMatch?.index ?? -1 }
       ].filter(section => section.index !== -1).sort((a, b) => a.index - b.index);
 
-      // 提取各部分内容
+      // 初始化内容变量
       let titles = '';
       let body = '';
       let tags: string[] = [];
       let imagePrompt = '';
 
-      for (let i = 0; i < sections.length; i++) {
-        const currentSection = sections[i];
-        const nextSection = sections[i + 1];
-
-        const startIndex = currentSection.index + (currentSection.match?.[0].length || 0);
-        const endIndex = nextSection ? nextSection.index : content.length;
-        const sectionContent = content.substring(startIndex, endIndex).trim();
-
-        switch (currentSection.name) {
-          case 'title':
-            titles = sectionContent;
-            break;
-          case 'body':
-            body = sectionContent;
-            break;
-          case 'tags':
-            // 解析标签，提取以#开头的标签或列表项
-            const tagMatches = sectionContent.match(/#[\u4e00-\u9fa5a-zA-Z0-9_]+/g) || [];
-            const listTagMatches = sectionContent.match(/[-*]\s*([^\n]+)/g) || [];
-            const extractedTags = [
-              ...tagMatches.map(tag => tag.substring(1)), // 移除#号
-              ...listTagMatches.map(item => item.replace(/[-*]\s*/, '').trim())
-            ];
-            tags = [...new Set(extractedTags)]; // 去重
-            break;
-          case 'imagePrompt':
-            imagePrompt = sectionContent;
-            break;
-        }
-      }
-
-      // 如果没有找到明确的分割，使用备用解析方案
       if (sections.length === 0) {
-        // 备用方案：查找正文标记
-        const bodyMarkers = [
-          '## 2. 正文内容',
-          '## 正文内容',
-          '## 2. 笔记正文',
-          '## 笔记正文',
-          '## 2. 内容',
-          '## 内容'
-        ];
-
-        let bodyStartIndex = -1;
-        let usedMarker = '';
-
-        for (const marker of bodyMarkers) {
-          const index = content.indexOf(marker);
-          if (index !== -1) {
-            bodyStartIndex = index;
-            usedMarker = marker;
-            break;
-          }
+        // 如果一个标记都找不到，所有内容都暂时视为标题
+        titles = content;
+      } else {
+        // **【核心修复逻辑】**
+        // 1. 检查第一个标记之前是否有内容，如果有，则视为标题
+        const firstSectionIndex = sections[0].index;
+        if (firstSectionIndex > 0) {
+          titles = content.substring(0, firstSectionIndex).trim();
         }
 
-        if (bodyStartIndex !== -1) {
-          titles = content.substring(0, bodyStartIndex).trim();
-          body = content.substring(bodyStartIndex + usedMarker.length).trim();
-        } else {
-          titles = content;
+        // 2. 循环解析每个已识别的部分
+        for (let i = 0; i < sections.length; i++) {
+          const currentSection = sections[i];
+          const nextSection = sections[i + 1];
+
+          // 计算当前部分的开始和结束位置
+          const startIndex = currentSection.index + (currentSection.match?.[0].length || 0);
+          const endIndex = nextSection ? nextSection.index : content.length;
+
+          const sectionContent = content.substring(startIndex, endIndex).trim();
+
+          switch (currentSection.name) {
+            case 'title':
+              titles = sectionContent;
+              break;
+            case 'body':
+              body = sectionContent;
+              break;
+            case 'tags':
+              const tagMatches = sectionContent.match(/#[\u4e00-\u9fa5a-zA-Z0-9_]+/g) || [];
+              const listTagMatches = sectionContent.match(/[-*]\s*([^\n]+)/g) || [];
+              const extractedTags = [
+                ...tagMatches.map(tag => tag.replace(/^#/, '')), // 移除#号
+                ...listTagMatches.map(item => item.replace(/[-*]\s*/, '').trim())
+              ];
+              tags = [...new Set(extractedTags)].filter(Boolean); // 去重并移除空字符串
+              break;
+            case 'imagePrompt':
+              imagePrompt = sectionContent;
+              break;
+          }
         }
       }
 
@@ -144,14 +118,6 @@ export default function Home() {
     };
 
     const parsed = parseContent(streamContent);
-
-    // 添加调试日志
-    console.log('🔍 解析结果:');
-    console.log('  - titles:', parsed.titles ? `长度${parsed.titles.length}` : '空');
-    console.log('  - body:', parsed.body ? `长度${parsed.body.length}` : '空');
-    console.log('  - tags:', parsed.tags.length);
-    console.log('  - imagePrompt:', parsed.imagePrompt ? `长度${parsed.imagePrompt.length}` : '空');
-
     setGeneratedTitles(parsed.titles);
     setGeneratedBody(parsed.body);
     setGeneratedTags(parsed.tags);
