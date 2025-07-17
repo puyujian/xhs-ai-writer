@@ -110,7 +110,7 @@ export default function Home() {
                 ...tagMatches.map(tag => tag.replace(/^#/, '')), // 移除#号
                 ...listTagMatches.map(item => item.replace(/[-*]\s*/, '').trim())
               ];
-              tags = [...new Set(extractedTags)].filter(Boolean); // 去重并移除空字符串
+              tags = Array.from(new Set(extractedTags)).filter(Boolean); // 去重并移除空字符串
               break;
             case 'imagePrompt':
               imagePrompt = sectionContent;
