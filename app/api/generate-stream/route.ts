@@ -65,16 +65,17 @@ export async function POST(request: Request) {
 
             // 敏感词过滤处理
             if (contentStarted && chunkToSend) {
-              // 检测敏感词
+              // 1. 先检测敏感词
               const detection = detectSensitiveWords(chunkToSend);
+
+              // 2. 如果检测到，只打印一次简洁的日志
               if (detection.hasSensitiveWords) {
-                console.warn('🚨 检测到敏感词:', detection.detectedWords);
-                // 过滤敏感词
+                console.warn(`🚨 在当前数据块中检测到敏感词: [${detection.detectedWords.join(', ')}]，已自动处理。`);
+                // 3. 然后进行过滤
                 chunkToSend = filterSensitiveContent(chunkToSend, 'replace');
-                console.log('✅ 敏感词已处理');
               }
 
-              // 发送处理后的内容
+              // 4. 发送处理后的内容
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: chunkToSend })}\n\n`));
             }
           },

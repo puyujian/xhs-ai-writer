@@ -41,9 +41,9 @@ export default function Home() {
     // 解析四个部分：标题、正文、标签、AI绘画提示词
     const parseContent = (content: string) => {
       // 定义各部分的正则表达式
-      const titleRegex = /##\s*1[.、]?\s*(爆款标题创作|标题|生成标题)/i;
+      const titleRegex = /##\s*1[.、]?\s*(爆款标题创作|标题|生成标题)(\s*（\d+个）)?/i;
       const bodyRegex = /##\s*2[.、]?\s*(正文内容|笔记正文|内容|正文|文案内容)/i;
-      const tagsRegex = /##\s*3[.、]?\s*(关键词标签|标签|关键词)/i;
+      const tagsRegex = /##\s*3[.、]?\s*(关键词标签|标签|关键词)(\s*（\d+-\d+个）)?/i;
       const imagePromptRegex = /##\s*4[.、]?\s*(AI绘画提示词|绘画提示词|AI绘画|绘画提示)/i;
 
       // 查找各部分的位置

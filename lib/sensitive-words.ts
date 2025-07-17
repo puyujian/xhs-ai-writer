@@ -136,23 +136,22 @@ export function detectSensitiveWords(text: string): {
  * @returns 过滤后的文本
  */
 export function filterSensitiveContent(
-  text: string, 
+  text: string,
   mode: 'replace' | 'mask' | 'remove' = 'replace'
 ): string {
   if (!text) return text;
-  
+
   return text.replace(sensitiveWordsRegex, (match) => {
     const lowerMatch = match.toLowerCase();
-    
-    // 记录检测到的敏感词
-    console.warn(`🚨 检测到敏感词: "${match}"，已${mode === 'replace' ? '替换' : mode === 'mask' ? '遮蔽' : '删除'}`);
-    
+
+    // 不再在这里打印日志，由调用方统一处理
+
     switch (mode) {
       case 'replace':
         // 优先使用预定义的替换词，否则用通用替换
-        return sensitiveWordReplacements[lowerMatch] || 
-               sensitiveWordReplacements[match] || 
-               '优质';
+        return sensitiveWordReplacements[lowerMatch] ||
+               sensitiveWordReplacements[match] ||
+               '[*]'; // 将默认替换改为更中性的[*]
       case 'mask':
         // 用*号遮蔽，保留首尾字符
         if (match.length <= 2) return '*'.repeat(match.length);
