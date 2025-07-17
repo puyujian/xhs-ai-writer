@@ -254,26 +254,33 @@ export async function getFallbackCacheData(keyword: string): Promise<CacheData |
 /**
  * 清理过期缓存
  */
-export async function cleanExpiredCache(): Promise<void> {
+export async function cleanExpiredCache(): Promise<{
+  cleanedCount: number;
+  totalFiles: number;
+  cacheEnabled: boolean;
+}> {
   // 检查是否启用缓存
   if (!isCacheEnabled()) {
     console.log('📝 缓存功能已禁用，跳过清理');
-    return;
+    return {
+      cleanedCount: 0,
+      totalFiles: 0,
+      cacheEnabled: false
+    };
   }
 
   try {
     await ensureCacheDir();
     const files = await fs.readdir(CACHE_CONFIG.CACHE_DIR);
+    const jsonFiles = files.filter(file => file.endsWith('.json'));
     let cleanedCount = 0;
 
-    for (const file of files) {
-      if (!file.endsWith('.json')) continue;
-      
+    for (const file of jsonFiles) {
       try {
         const filePath = path.join(CACHE_CONFIG.CACHE_DIR, file);
         const content = await fs.readFile(filePath, 'utf-8');
         const cacheData: CacheData = JSON.parse(content);
-        
+
         if (!isCacheValid(cacheData.timestamp)) {
           await fs.unlink(filePath);
           cleanedCount++;
@@ -289,8 +296,19 @@ export async function cleanExpiredCache(): Promise<void> {
     if (cleanedCount > 0) {
       console.log(`🧹 清理了 ${cleanedCount} 个过期缓存文件`);
     }
+
+    return {
+      cleanedCount,
+      totalFiles: jsonFiles.length,
+      cacheEnabled: true
+    };
   } catch (error) {
     console.error('清理缓存失败:', error);
+    return {
+      cleanedCount: 0,
+      totalFiles: 0,
+      cacheEnabled: true
+    };
   }
 }
 
