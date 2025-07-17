@@ -100,7 +100,7 @@ export class AIManager {
       console.log(`🔍 AI响应前100字符: ${content.substring(0, 100)}...`);
     }
 
-    const parsed = safeJsonParse(content, null);
+    const parsed: any = safeJsonParse(content, null);
     if (parsed === null) {
       errors.push('AI返回的不是有效的JSON格式');
       console.error('❌ JSON解析失败，原始内容:', content);
