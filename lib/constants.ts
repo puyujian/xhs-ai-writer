@@ -35,7 +35,7 @@ export const SUCCESS_MESSAGES = {
 export const CONFIG = {
   DEFAULT_AI_MODEL: 'gemini-2.5-flash',
   // Gemini有1M上下文，不需要限制max_tokens
-  TEMPERATURE: 0.8,
+  TEMPERATURE: 0.4, // 降低温度提高输出稳定性
   TARGET_NOTES_COUNT: 40,
   MAX_PAGES: 3,
   TRACE_ID_LENGTH: 16,

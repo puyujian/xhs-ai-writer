@@ -238,7 +238,7 @@ export class AIManager {
           model: getEnvVar('AI_MODEL_NAME', CONFIG.DEFAULT_AI_MODEL),
           messages: [{ role: "user", content: prompt }],
           response_format: { type: "json_object" },
-          temperature: 0.7,
+          temperature: CONFIG.TEMPERATURE, // 使用统一的温度配置
           // Gemini有1M上下文，不需要限制max_tokens
         });
 

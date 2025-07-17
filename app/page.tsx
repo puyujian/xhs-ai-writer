@@ -40,6 +40,10 @@ export default function Home() {
   useEffect(() => {
     // 解析四个部分：标题、正文、标签、AI绘画提示词
     const parseContent = (content: string) => {
+      // 添加调试日志
+      console.log('🔍 开始解析内容，内容长度:', content.length);
+      console.log('🔍 内容前200字符:', content.substring(0, 200));
+
       // 定义各部分的正则表达式
       const titleRegex = /##\s*1[.、]?\s*(爆款标题创作|标题|生成标题)(\s*（\d+个）)?/i;
       const bodyRegex = /##\s*2[.、]?\s*(正文内容|笔记正文|内容|正文|文案内容)/i;
@@ -51,6 +55,13 @@ export default function Home() {
       const bodyMatch = content.match(bodyRegex);
       const tagsMatch = content.match(tagsRegex);
       const imagePromptMatch = content.match(imagePromptRegex);
+
+      // 添加调试日志
+      console.log('🔍 正则匹配结果:');
+      console.log('  - titleMatch:', titleMatch ? `找到: ${titleMatch[0]}` : '未找到');
+      console.log('  - bodyMatch:', bodyMatch ? `找到: ${bodyMatch[0]}` : '未找到');
+      console.log('  - tagsMatch:', tagsMatch ? `找到: ${tagsMatch[0]}` : '未找到');
+      console.log('  - imagePromptMatch:', imagePromptMatch ? `找到: ${imagePromptMatch[0]}` : '未找到');
 
       // 创建位置数组并排序
       const sections = [
@@ -133,6 +144,14 @@ export default function Home() {
     };
 
     const parsed = parseContent(streamContent);
+
+    // 添加调试日志
+    console.log('🔍 解析结果:');
+    console.log('  - titles:', parsed.titles ? `长度${parsed.titles.length}` : '空');
+    console.log('  - body:', parsed.body ? `长度${parsed.body.length}` : '空');
+    console.log('  - tags:', parsed.tags.length);
+    console.log('  - imagePrompt:', parsed.imagePrompt ? `长度${parsed.imagePrompt.length}` : '空');
+
     setGeneratedTitles(parsed.titles);
     setGeneratedBody(parsed.body);
     setGeneratedTags(parsed.tags);
