@@ -36,11 +36,19 @@ interface RetryConfig {
 export class AIManager {
   private client: OpenAI | null = null;
   private retryConfig: RetryConfig = {
-    maxRetries: 3,
+    maxRetries: 2,
     baseDelay: 1000,
     maxDelay: 10000,
     backoffMultiplier: 2
   };
+
+  /**
+   * 解析模型列表，支持多模型降级
+   */
+  private getModelList(): string[] {
+    const modelNames = getEnvVar('AI_MODEL_NAME', CONFIG.DEFAULT_AI_MODEL);
+    return modelNames.split(',').map(name => name.trim()).filter(name => name.length > 0);
+  }
 
   /**
    * 获取AI客户端实例
@@ -263,59 +271,79 @@ export class AIManager {
   }
 
   /**
-   * 带重试的AI分析调用
+   * 带重试的AI分析调用（支持多模型降级）
    */
   async analyzeWithRetry(
     prompt: string,
     expectedFields: string[] = ['titleFormulas', 'contentStructure', 'tagStrategy', 'coverStyleAnalysis']
   ): Promise<any> {
+    const modelList = this.getModelList();
     let lastError: Error | null = null;
-    
-    for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
-      try {
-        console.log(`🤖 AI分析尝试 ${attempt + 1}/${this.retryConfig.maxRetries + 1}`);
-        
-        const client = this.getClient();
-        const response = await client.chat.completions.create({
-          model: getEnvVar('AI_MODEL_NAME', CONFIG.DEFAULT_AI_MODEL),
-          messages: [{ role: "user", content: prompt }],
-          response_format: { type: "json_object" },
-          temperature: CONFIG.TEMPERATURE, // 使用统一的温度配置
-          // Gemini有1M上下文，不需要限制max_tokens
-        });
 
-        const content = response.choices[0]?.message?.content;
-        if (!content) {
-          throw new Error('AI返回了空响应');
+    // 遍历所有可用模型
+    for (let modelIndex = 0; modelIndex < modelList.length; modelIndex++) {
+      const currentModel = modelList[modelIndex];
+
+      // 对每个模型进行重试
+      for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
+        try {
+          if (debugLoggingEnabled) {
+            console.log(`🤖 AI分析尝试 ${attempt + 1}/${this.retryConfig.maxRetries + 1} (模型: ${currentModel})`);
+          }
+
+          const client = this.getClient();
+          const response = await client.chat.completions.create({
+            model: currentModel,
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" },
+            temperature: CONFIG.TEMPERATURE,
+          });
+
+          const content = response.choices[0]?.message?.content;
+          if (!content) {
+            throw new Error('AI返回了空响应');
+          }
+
+          // 验证响应
+          const validation = this.validateJsonResponse(content, expectedFields);
+          if (!validation.isValid) {
+            throw new Error(`AI响应验证失败: ${validation.errors.join(', ')}`);
+          }
+
+          if (debugLoggingEnabled) {
+            console.log(`✅ AI分析成功 (模型: ${currentModel})`);
+          }
+          return validation.data;
+
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+
+          if (debugLoggingEnabled) {
+            console.warn(`⚠️ 模型 ${currentModel} 尝试 ${attempt + 1} 失败:`, lastError.message);
+          }
+
+          // 如果不是最后一次尝试，等待后重试
+          if (attempt < this.retryConfig.maxRetries) {
+            const delayMs = this.calculateDelay(attempt);
+            if (debugLoggingEnabled) {
+              console.log(`⏳ 等待 ${delayMs}ms 后重试...`);
+            }
+            await this.delay(delayMs);
+          }
         }
+      }
 
-        // 验证响应
-        const validation = this.validateJsonResponse(content, expectedFields);
-        if (!validation.isValid) {
-          throw new Error(`AI响应验证失败: ${validation.errors.join(', ')}`);
-        }
-
+      // 当前模型的所有重试都失败了，尝试下一个模型
+      if (modelIndex < modelList.length - 1) {
         if (debugLoggingEnabled) {
-          console.log('✅ AI分析成功');
-        }
-        return validation.data;
-
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-        console.warn(`⚠️ AI分析尝试 ${attempt + 1} 失败:`, lastError.message);
-
-        // 如果不是最后一次尝试，等待后重试
-        if (attempt < this.retryConfig.maxRetries) {
-          const delayMs = this.calculateDelay(attempt);
-          console.log(`⏳ 等待 ${delayMs}ms 后重试...`);
-          await this.delay(delayMs);
+          console.log(`🔄 模型 ${currentModel} 失败，尝试下一个模型: ${modelList[modelIndex + 1]}`);
         }
       }
     }
 
-    // 所有重试都失败了
+    // 所有模型和重试都失败了
     throw new BusinessError(
-      `AI分析失败，已重试${this.retryConfig.maxRetries}次: ${lastError?.message}`,
+      `AI分析失败，已尝试所有模型 [${modelList.join(', ')}]，每个模型重试${this.retryConfig.maxRetries}次: ${lastError?.message}`,
       'AI分析失败',
       '请稍后重试，如果问题持续请联系技术支持',
       true
@@ -323,27 +351,34 @@ export class AIManager {
   }
 
   /**
-   * 带重试的流式生成调用
+   * 带重试的流式生成调用（支持多模型降级）
    */
   async generateStreamWithRetry(
     prompt: string,
     onChunk: (content: string) => void,
     onError: (error: Error) => void
   ): Promise<void> {
+    const modelList = this.getModelList();
     let lastError: Error | null = null;
-    
-    for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
-      try {
-        console.log(`🤖 流式生成尝试 ${attempt + 1}/${this.retryConfig.maxRetries + 1}`);
-        
-        const client = this.getClient();
-        const response = await client.chat.completions.create({
-          model: getEnvVar('AI_MODEL_NAME', CONFIG.DEFAULT_AI_MODEL),
-          messages: [{ role: "user", content: prompt }],
-          stream: true,
-          temperature: CONFIG.TEMPERATURE,
-          // Gemini有1M上下文，不需要限制max_tokens
-        });
+
+    // 遍历所有可用模型
+    for (let modelIndex = 0; modelIndex < modelList.length; modelIndex++) {
+      const currentModel = modelList[modelIndex];
+
+      // 对每个模型进行重试
+      for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
+        try {
+          if (debugLoggingEnabled) {
+            console.log(`🤖 流式生成尝试 ${attempt + 1}/${this.retryConfig.maxRetries + 1} (模型: ${currentModel})`);
+          }
+
+          const client = this.getClient();
+          const response = await client.chat.completions.create({
+            model: currentModel,
+            messages: [{ role: "user", content: prompt }],
+            stream: true,
+            temperature: CONFIG.TEMPERATURE,
+          });
 
         let hasContent = false;
         let lastChunkTime = Date.now();
@@ -364,36 +399,49 @@ export class AIManager {
           }
         }
 
-        if (!hasContent) {
-          throw new Error('AI没有返回任何内容');
-        }
+          if (!hasContent) {
+            throw new Error('AI没有返回任何内容');
+          }
 
+          if (debugLoggingEnabled) {
+            console.log(`✅ 流式生成成功 (模型: ${currentModel})`);
+          }
+          return;
+
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+
+          if (debugLoggingEnabled) {
+            console.warn(`⚠️ 模型 ${currentModel} 流式生成尝试 ${attempt + 1} 失败:`, lastError.message);
+          }
+
+          // 如果不是最后一次尝试，等待后重试
+          if (attempt < this.retryConfig.maxRetries) {
+            const delayMs = this.calculateDelay(attempt);
+            if (debugLoggingEnabled) {
+              console.log(`⏳ 等待 ${delayMs}ms 后重试...`);
+            }
+            await this.delay(delayMs);
+          }
+        }
+      }
+
+      // 当前模型的所有重试都失败了，尝试下一个模型
+      if (modelIndex < modelList.length - 1) {
         if (debugLoggingEnabled) {
-          console.log('✅ 流式生成成功');
-        }
-        return;
-
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-        console.warn(`⚠️ 流式生成尝试 ${attempt + 1} 失败:`, lastError.message);
-
-        // 如果不是最后一次尝试，等待后重试
-        if (attempt < this.retryConfig.maxRetries) {
-          const delayMs = this.calculateDelay(attempt);
-          console.log(`⏳ 等待 ${delayMs}ms 后重试...`);
-          await this.delay(delayMs);
+          console.log(`🔄 模型 ${currentModel} 失败，尝试下一个模型: ${modelList[modelIndex + 1]}`);
         }
       }
     }
 
-    // 所有重试都失败了
+    // 所有模型和重试都失败了
     const finalError = new BusinessError(
-      `流式生成失败，已重试${this.retryConfig.maxRetries}次: ${lastError?.message}`,
+      `流式生成失败，已尝试所有模型 [${modelList.join(', ')}]，每个模型重试${this.retryConfig.maxRetries}次: ${lastError?.message}`,
       '内容生成失败',
       '请稍后重试，如果问题持续请联系技术支持',
       true
     );
-    
+
     onError(finalError);
   }
 

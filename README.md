@@ -75,8 +75,8 @@ THIRD_PARTY_API_URL="https://your-api-provider.com/v1"
 # 第三方AI服务API密钥
 THIRD_PARTY_API_KEY="your_api_key_here"
 
-# AI模型名称
-AI_MODEL_NAME="gemini-2.5-flash"
+# AI模型名称（支持多模型降级，用逗号分隔）
+AI_MODEL_NAME="gemini-2.5-pro,gemini-2.5-flash"
 
 # 缓存功能开关 (true=启用, false=禁用)
 ENABLE_CACHE=true
@@ -144,6 +144,35 @@ npm run dev
 ├── .env.local                   # 环境变量
 └── README.md
 ```
+
+## 🤖 多模型降级策略
+
+### 智能模型切换
+应用支持多模型降级策略，确保服务的高可用性：
+
+- **配置方式**: 在 `AI_MODEL_NAME` 中用逗号分隔多个模型
+- **降级逻辑**: 优先使用第一个模型 → 失败后自动切换到备用模型
+- **重试机制**: 每个模型都有独立的重试次数（默认2次）
+- **智能恢复**: 下次请求会重新从第一个模型开始尝试
+
+### 配置示例
+
+```env
+# 单模型配置
+AI_MODEL_NAME="gemini-2.5-pro"
+
+# 多模型降级配置（推荐）
+AI_MODEL_NAME="gemini-2.5-pro,gemini-2.5-flash"
+
+# 更多模型配置
+AI_MODEL_NAME="gpt-4,gemini-2.5-pro,gemini-2.5-flash"
+```
+
+### 降级流程
+1. 🎯 **主模型尝试**: 使用第一个模型（如 `gemini-2.5-pro`）
+2. 🔄 **重试机制**: 如果失败，重试2次（带指数退避）
+3. 🔀 **模型切换**: 主模型所有重试失败后，切换到备用模型
+4. ✅ **成功恢复**: 备用模型成功后，下次请求重新从主模型开始
 
 ## 缓存功能说明
 
