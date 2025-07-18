@@ -7,6 +7,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3-38B2AC)](https://tailwindcss.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![小红书](https://img.shields.io/badge/小红书-关注作者-red)](https://www.xiaohongshu.com/user/profile/5e141963000000000100158e)
 
 ## ✨ 核心特性
 
@@ -249,6 +250,26 @@ validateTagStrategy(tagStrategy, errors);
 - **独立复制功能**: 每个内容模块都有专属复制按钮
 - **渐变视觉设计**: 粉红到红色的现代化渐变效果
 - **响应式布局**: 完美适配桌面端和移动端
+
+## 👨‍💻 关于作者
+
+这个项目由小红书博主精心打造，专注于AI工具开发和内容创作技巧分享。
+
+### 📱 关注作者小红书
+**[点击关注 →](https://www.xiaohongshu.com/user/profile/5e141963000000000100158e)**
+
+在我的小红书账号，你可以获得：
+- 🔥 **最新AI工具使用技巧**
+- 📝 **小红书运营实战经验**
+- 💡 **爆款文案创作心得**
+- 🚀 **内容创作工具推荐**
+
+### 💬 交流与反馈
+- 如果这个工具对你有帮助，欢迎在小红书私信交流
+- 有任何使用问题或改进建议，也可以通过小红书联系我
+- 期待看到你用这个工具创作出的爆款内容！
+
+---
 
 ## 许可证
 

@@ -25,6 +25,15 @@ interface ErrorState {
   errorId: string;
 }
 
+// 将正则表达式定义移到组件外部，避免重复创建
+const titleRegex = /##\s*1[.、]?\s*(爆款标题创作|标题|生成标题)(\s*（\d+个）)?/i;
+const bodyRegex = /##\s*2[.、]?\s*(正文内容|笔记正文|内容|正文|文案内容)/i;
+const tagsRegex = /##\s*3[.、]?\s*(关键词标签|标签|关键词)(\s*（\d+-\d+个）)?/i;
+const imagePromptRegex = /##\s*4[.、]?\s*(AI绘画提示词|绘画提示词|AI绘画|绘画提示)/i;
+const selfCommentRegex = /##\s*5[.、]?\s*(首评关键词引导|首评)/i;
+const strategyRegex = /##\s*6[.、]?\s*(发布策略建议|发布策略)/i;
+const playbookRegex = /##\s*7[.、]?\s*(小红书增长 Playbook|增长 Playbook)/i;
+
 export default function Home() {
   const [keyword, setKeyword] = useState('')
   const [userInfo, setUserInfo] = useState('')
@@ -71,16 +80,6 @@ export default function Home() {
   useEffect(() => {
     // 解析四个部分：标题、正文、标签、AI绘画提示词
     const parseContent = (content: string) => {
-
-      // 定义各部分的正则表达式
-      const titleRegex = /##\s*1[.、]?\s*(爆款标题创作|标题|生成标题)(\s*（\d+个）)?/i;
-      const bodyRegex = /##\s*2[.、]?\s*(正文内容|笔记正文|内容|正文|文案内容)/i;
-      const tagsRegex = /##\s*3[.、]?\s*(关键词标签|标签|关键词)(\s*（\d+-\d+个）)?/i;
-      const imagePromptRegex = /##\s*4[.、]?\s*(AI绘画提示词|绘画提示词|AI绘画|绘画提示)/i;
-      // 新增三个正则表达式
-      const selfCommentRegex = /##\s*5[.、]?\s*(首评关键词引导|首评)/i;
-      const strategyRegex = /##\s*6[.、]?\s*(发布策略建议|发布策略)/i;
-      const playbookRegex = /##\s*7[.、]?\s*(小红书增长 Playbook|增长 Playbook)/i;
 
       // 查找各部分的位置
       const titleMatch = content.match(titleRegex);
@@ -215,6 +214,21 @@ export default function Home() {
     }
   }, []);
 
+  // 提取状态重置逻辑，避免代码重复
+  const resetOutputStates = useCallback(() => {
+    setStreamContent('')
+    setDisplayContent('')
+    setGeneratedTitles('')
+    setGeneratedBody('')
+    setGeneratedTags([])
+    setGeneratedImagePrompt('')
+    setGeneratedSelfComment('')
+    setGeneratedStrategy('')
+    setGeneratedPlaybook('')
+    chunkQueueRef.current = []
+    stopTypewriter()
+  }, [stopTypewriter]);
+
   // 清理函数
   useEffect(() => {
     return () => {
@@ -234,19 +248,7 @@ export default function Home() {
     setLoading(true)
     setLoadingStage('analyzing')
     setError(null)
-    setStreamContent('')
-    setDisplayContent('') // 清空显示内容
-    setGeneratedTitles('')
-    setGeneratedBody('')
-    setGeneratedTags([])
-    setGeneratedImagePrompt('')
-    setGeneratedSelfComment('')
-    setGeneratedStrategy('')
-    setGeneratedPlaybook('')
-
-    // 清空队列和停止之前的打字机
-    chunkQueueRef.current = []
-    stopTypewriter()
+    resetOutputStates()
 
     // 创建新的AbortController
     abortControllerRef.current = new AbortController()
@@ -372,20 +374,7 @@ export default function Home() {
   const handleRetry = () => {
     setRetryCount(prev => prev + 1);
     setError(null);
-    setStreamContent('');
-    setDisplayContent(''); // 清空显示内容
-    setGeneratedTitles('');
-    setGeneratedBody('');
-    setGeneratedTags([]);
-    setGeneratedImagePrompt('');
-    setGeneratedSelfComment('');
-    setGeneratedStrategy('');
-    setGeneratedPlaybook('');
-
-    // 清理打字机状态
-    chunkQueueRef.current = []
-    stopTypewriter()
-
+    resetOutputStates();
     handleGenerate();
   }
 
@@ -421,13 +410,21 @@ export default function Home() {
           <p className="text-lg text-gray-600 mb-4">
             智能分析热门笔记，实时生成爆款文案
           </p>
-          <div className="flex justify-center gap-4">
+          <div className="flex justify-center gap-4 flex-wrap">
             <Link
               href="/blog"
               className="inline-flex items-center px-4 py-2 text-sm text-purple-600 hover:text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-50 transition-colors"
             >
               📚 写作攻略
             </Link>
+            <a
+              href="https://www.xiaohongshu.com/user/profile/5e141963000000000100158e"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center px-4 py-2 text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+            >
+              📱 关注作者小红书
+            </a>
             <a
               href="https://github.com/EBOLABOY/xhs-ai-writer"
               target="_blank"
@@ -849,6 +846,34 @@ export default function Home() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* 作者信息区域 */}
+        <div className="mt-12 text-center">
+          <Card className="bg-gradient-to-r from-red-50 to-pink-50 border-red-200">
+            <CardContent className="py-6">
+              <div className="flex flex-col items-center gap-4">
+                <div className="text-lg font-semibold text-gray-800">
+                  💡 喜欢这个工具吗？
+                </div>
+                <p className="text-gray-600 max-w-2xl">
+                  这个AI工具由小红书博主精心打造，专注于帮助大家创作更优质的内容。
+                  如果觉得有用，欢迎关注我的小红书，获取更多爆款创作技巧！
+                </p>
+                <a
+                  href="https://www.xiaohongshu.com/user/profile/5e141963000000000100158e"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-6 py-3 text-base font-medium text-white bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+                >
+                  📱 关注作者小红书，获取更多干货
+                </a>
+                <p className="text-sm text-gray-500">
+                  分享小红书运营技巧 • AI工具使用心得 • 爆款文案解析
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

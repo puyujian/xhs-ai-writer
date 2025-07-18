@@ -4,11 +4,23 @@ import { aiManager } from '@/lib/ai-manager';
 import { filterSensitiveContent, detectSensitiveWords } from '@/lib/sensitive-words';
 import { sanitizeText } from '@/lib/utils';
 
+// 调试日志控制
+const debugLoggingEnabled = process.env.ENABLE_DEBUG_LOGGING === 'true';
+
 // AI交互现在通过aiManager统一管理
 
 export async function POST(request: Request) {
   try {
     const { keyword, user_info, hot_post_rules } = await request.json();
+
+    // 添加调试日志，验证数据传递
+    if (debugLoggingEnabled) {
+      console.log('🔍 generate-stream 接收到的数据:');
+      console.log('📝 keyword:', keyword);
+      console.log('📝 user_info 长度:', user_info?.length || 0, '字符');
+      console.log('📝 user_info 前100字符:', user_info?.substring(0, 100) || '空');
+      console.log('📝 hot_post_rules 是否存在:', !!hot_post_rules);
+    }
 
     if (!user_info || !keyword) {
       return new Response(ERROR_MESSAGES.MISSING_REQUIRED_PARAMS, { status: HTTP_STATUS.BAD_REQUEST });

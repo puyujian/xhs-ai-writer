@@ -293,8 +293,17 @@ export async function POST(request: Request) {
     // 智能获取热门笔记数据（缓存优先）
     const scrapedContent = await fetchHotPostsWithCache(keyword);
 
+    // 对抓取内容进行安全转义，防止破坏JSON格式
+    const safeContent = scrapedContent
+      .replace(/```/g, '´´´')  // 转义代码块标记
+      .replace(/"/g, '\\"')    // 转义双引号
+      .replace(/\\/g, '\\\\')  // 转义反斜杠
+      .replace(/\n/g, '\\n')   // 转义换行符
+      .replace(/\r/g, '\\r')   // 转义回车符
+      .replace(/\t/g, '\\t');  // 转义制表符
+
     // 使用模块化的分析提示词
-    const analysisPrompt = getAnalysisPrompt(scrapedContent);
+    const analysisPrompt = getAnalysisPrompt(safeContent);
 
     // 使用AI管理器进行分析（带重试机制）
     const analysisResult = await aiManager.analyzeWithRetry(
