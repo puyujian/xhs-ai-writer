@@ -60,15 +60,15 @@
 
 ### 2. 安装依赖
 
-\`\`\`bash
+```bash
 npm install
-\`\`\`
+```
 
 ### 3. 环境变量配置
 
-复制 \`.env.local\` 文件并填入真实配置：
+复制 `.env.local` 文件并填入真实配置：
 
-\`\`\`env
+```env
 # 第三方AI服务的接入点URL (通常以 /v1 结尾)
 THIRD_PARTY_API_URL="https://your-api-provider.com/v1"
 
@@ -83,13 +83,13 @@ ENABLE_CACHE=true
 
 # 小红书Cookie（可选，用于真实数据抓取）
 XHS_COOKIE="your_xiaohongshu_cookie_here"
-\`\`\`
+```
 
 ### 4. 启动开发服务器
 
-\`\`\`bash
+```bash
 npm run dev
-\`\`\`
+```
 
 访问 [http://localhost:3000](http://localhost:3000) 查看应用
 
@@ -129,7 +129,7 @@ npm run dev
 
 ## 项目结构
 
-\`\`\`
+```
 ├── app/
 │   ├── api/
 │   │   ├── analyze-hot-posts/    # 热门分析API
@@ -143,7 +143,7 @@ npm run dev
 │   └── utils.ts                 # 工具函数
 ├── .env.local                   # 环境变量
 └── README.md
-\`\`\`
+```
 
 ## 缓存功能说明
 
