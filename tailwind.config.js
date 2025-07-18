@@ -54,8 +54,42 @@ module.exports = {
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',
   			sm: 'calc(var(--radius) - 4px)'
-  		}
+  		},
+  		// ======================================================================
+  		// ========================= 核心优化点在这里 =========================
+  		// ======================================================================
+  		typography: (theme) => ({
+  			pink: {
+  				css: {
+  					'--tw-prose-body': theme('colors.gray[800]'),
+  					'--tw-prose-headings': theme('colors.gray[900]'),
+  					'--tw-prose-lead': theme('colors.pink[700]'),
+  					'--tw-prose-links': theme('colors.pink[900]'),
+  					'--tw-prose-bold': theme('colors.pink[600]'),
+  					'--tw-prose-counters': theme('colors.pink[600]'),
+  					'--tw-prose-bullets': theme('colors.pink[400]'),
+
+  					// 自定义列表项的Emoji，彻底解决美观问题
+  					'ul > li::before': {
+  						content: "'✨'",
+  						marginRight: '0.5em',
+  						color: theme('colors.pink[400]'),
+  					},
+  					// 确保列表项没有默认的 disc 样式
+  					'ul > li': {
+  						paddingLeft: '0',
+  					},
+  					'ul > li > p': {
+  						margin: '0',
+  					},
+  				},
+  			},
+  		}),
   	}
   },
-  plugins: [require("tailwindcss-animate")],
+  // 将插件添加到 plugins 数组中
+  plugins: [
+  	require("tailwindcss-animate"),
+  	require("@tailwindcss/typography") // <--- 新增这一行
+  ],
 }

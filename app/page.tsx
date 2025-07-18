@@ -9,6 +9,11 @@ import { Badge } from '@/components/ui/badge'
 import { formatErrorForUser } from '@/lib/error-handler'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+// ======================================================================
+// ========================= 核心优化点 1/4 =========================
+// ======================================================================
+// 引入 Clipboard 和 Check 图标
+import { Clipboard, Check } from 'lucide-react'
 
 interface ErrorState {
   title: string;
@@ -31,10 +36,30 @@ export default function Home() {
   const [generatedBody, setGeneratedBody] = useState('') // 仅正文部分
   const [generatedTags, setGeneratedTags] = useState<string[]>([]) // 关键词标签
   const [generatedImagePrompt, setGeneratedImagePrompt] = useState('') // AI绘画提示词
+  const [generatedSelfComment, setGeneratedSelfComment] = useState('') // 用于首评引导
+  const [generatedStrategy, setGeneratedStrategy] = useState('') // 用于发布策略
+  const [generatedPlaybook, setGeneratedPlaybook] = useState('') // 用于增长Playbook
 
   const [error, setError] = useState<ErrorState | null>(null)
   const [retryCount, setRetryCount] = useState(0)
   const abortControllerRef = useRef<AbortController | null>(null)
+
+  // ======================================================================
+  // ========================= 核心优化点 1/3 =========================
+  // ======================================================================
+  // 为每个需要复制的区域创建一个 ref
+  const titlesRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const tagsRef = useRef<HTMLDivElement>(null);
+  const imagePromptRef = useRef<HTMLDivElement>(null);
+  const selfCommentRef = useRef<HTMLDivElement>(null);
+
+  // ======================================================================
+  // ========================= 核心优化点 2/4 =========================
+  // ======================================================================
+  // 新增一个 state 来追踪哪个按钮被点击了
+  const [copiedButtonId, setCopiedButtonId] = useState<string | null>(null);
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 模拟打字机相关状态
   const chunkQueueRef = useRef<string[]>([]) // 数据块队列
@@ -51,12 +76,20 @@ export default function Home() {
       const bodyRegex = /##\s*2[.、]?\s*(正文内容|笔记正文|内容|正文|文案内容)/i;
       const tagsRegex = /##\s*3[.、]?\s*(关键词标签|标签|关键词)(\s*（\d+-\d+个）)?/i;
       const imagePromptRegex = /##\s*4[.、]?\s*(AI绘画提示词|绘画提示词|AI绘画|绘画提示)/i;
+      // 新增三个正则表达式
+      const selfCommentRegex = /##\s*5[.、]?\s*(首评关键词引导|首评)/i;
+      const strategyRegex = /##\s*6[.、]?\s*(发布策略建议|发布策略)/i;
+      const playbookRegex = /##\s*7[.、]?\s*(小红书增长 Playbook|增长 Playbook)/i;
 
       // 查找各部分的位置
       const titleMatch = content.match(titleRegex);
       const bodyMatch = content.match(bodyRegex);
       const tagsMatch = content.match(tagsRegex);
       const imagePromptMatch = content.match(imagePromptRegex);
+      // 新增匹配
+      const selfCommentMatch = content.match(selfCommentRegex);
+      const strategyMatch = content.match(strategyRegex);
+      const playbookMatch = content.match(playbookRegex);
 
 
 
@@ -65,7 +98,11 @@ export default function Home() {
         { name: 'title', match: titleMatch, index: titleMatch?.index ?? -1 },
         { name: 'body', match: bodyMatch, index: bodyMatch?.index ?? -1 },
         { name: 'tags', match: tagsMatch, index: tagsMatch?.index ?? -1 },
-        { name: 'imagePrompt', match: imagePromptMatch, index: imagePromptMatch?.index ?? -1 }
+        { name: 'imagePrompt', match: imagePromptMatch, index: imagePromptMatch?.index ?? -1 },
+        // 新增 section
+        { name: 'selfComment', match: selfCommentMatch, index: selfCommentMatch?.index ?? -1 },
+        { name: 'strategy', match: strategyMatch, index: strategyMatch?.index ?? -1 },
+        { name: 'playbook', match: playbookMatch, index: playbookMatch?.index ?? -1 }
       ].filter(section => section.index !== -1).sort((a, b) => a.index - b.index);
 
       // 初始化内容变量
@@ -73,6 +110,10 @@ export default function Home() {
       let body = '';
       let tags: string[] = [];
       let imagePrompt = '';
+      // 新增变量
+      let selfComment = '';
+      let strategy = '';
+      let playbook = '';
 
       if (sections.length === 0) {
         // 如果一个标记都找不到，所有内容都暂时视为标题
@@ -115,11 +156,21 @@ export default function Home() {
             case 'imagePrompt':
               imagePrompt = sectionContent;
               break;
+            // 新增 case
+            case 'selfComment':
+              selfComment = sectionContent;
+              break;
+            case 'strategy':
+              strategy = sectionContent;
+              break;
+            case 'playbook':
+              playbook = sectionContent;
+              break;
           }
         }
       }
 
-      return { titles, body, tags, imagePrompt };
+      return { titles, body, tags, imagePrompt, selfComment, strategy, playbook };
     };
 
     const parsed = parseContent(displayContent);
@@ -127,6 +178,10 @@ export default function Home() {
     setGeneratedBody(parsed.body);
     setGeneratedTags(parsed.tags);
     setGeneratedImagePrompt(parsed.imagePrompt);
+    // 设置新状态
+    setGeneratedSelfComment(parsed.selfComment);
+    setGeneratedStrategy(parsed.strategy);
+    setGeneratedPlaybook(parsed.playbook);
   }, [displayContent]);
 
   // 启动打字机效果
@@ -184,6 +239,9 @@ export default function Home() {
     setGeneratedBody('')
     setGeneratedTags([])
     setGeneratedImagePrompt('')
+    setGeneratedSelfComment('')
+    setGeneratedStrategy('')
+    setGeneratedPlaybook('')
 
     // 清空队列和停止之前的打字机
     chunkQueueRef.current = []
@@ -319,6 +377,9 @@ export default function Home() {
     setGeneratedBody('');
     setGeneratedTags([]);
     setGeneratedImagePrompt('');
+    setGeneratedSelfComment('');
+    setGeneratedStrategy('');
+    setGeneratedPlaybook('');
 
     // 清理打字机状态
     chunkQueueRef.current = []
@@ -326,6 +387,28 @@ export default function Home() {
 
     handleGenerate();
   }
+
+  // ======================================================================
+  // ========================= 核心优化点 3/4 =========================
+  // ======================================================================
+  // 通用的、带反馈的复制处理函数
+  const handleCopy = (textToCopy: string | undefined, buttonId: string) => {
+    if (!textToCopy) return;
+
+    navigator.clipboard.writeText(textToCopy);
+
+    // 清除上一个计时器（如果存在）
+    if (copyTimeoutRef.current) {
+      clearTimeout(copyTimeoutRef.current);
+    }
+
+    setCopiedButtonId(buttonId);
+
+    // 2秒后自动恢复按钮状态
+    copyTimeoutRef.current = setTimeout(() => {
+      setCopiedButtonId(null);
+    }, 2000);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 to-red-50 p-4">
@@ -455,16 +538,21 @@ export default function Home() {
                 </div>
                 {!loading && generatedTitles && (
                   <Button
-                    onClick={() => navigator.clipboard.writeText(generatedTitles)}
+                    onClick={() => handleCopy(titlesRef.current?.innerText, 'titles')}
                     variant="outline"
                     size="sm"
+                    className="w-[120px]" // 固定宽度防止文字变化时按钮抖动
                   >
-                    📋 复制标题
+                    {copiedButtonId === 'titles' ? (
+                      <span className="flex items-center gap-2"> <Check size={16} /> 已复制 </span>
+                    ) : (
+                      <span className="flex items-center gap-2"> <Clipboard size={16} /> 复制标题 </span>
+                    )}
                   </Button>
                 )}
               </CardHeader>
               <CardContent>
-                <div className="prose prose-pink max-w-none text-gray-800 leading-relaxed">
+                <div ref={titlesRef} className="prose prose-pink max-w-none text-gray-800 leading-relaxed">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {generatedTitles}
                   </ReactMarkdown>
@@ -484,16 +572,21 @@ export default function Home() {
                 </div>
                 {!loading && generatedBody && (
                   <Button
-                    onClick={() => navigator.clipboard.writeText(generatedBody)}
+                    onClick={() => handleCopy(bodyRef.current?.innerText, 'body')}
                     variant="outline"
                     size="sm"
+                    className="w-[120px]"
                   >
-                    📋 复制正文
+                    {copiedButtonId === 'body' ? (
+                      <span className="flex items-center gap-2"> <Check size={16} /> 已复制 </span>
+                    ) : (
+                      <span className="flex items-center gap-2"> <Clipboard size={16} /> 复制正文 </span>
+                    )}
                   </Button>
                 )}
               </CardHeader>
               <CardContent>
-                <div className="prose prose-pink max-w-none text-gray-800 leading-relaxed">
+                <div ref={bodyRef} className="prose prose-pink max-w-none text-gray-800 leading-relaxed">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {generatedBody}
                   </ReactMarkdown>
@@ -513,16 +606,21 @@ export default function Home() {
                 </div>
                 {!loading && generatedTags.length > 0 && (
                   <Button
-                    onClick={() => navigator.clipboard.writeText(generatedTags.map(tag => `#${tag}`).join(' '))}
+                    onClick={() => handleCopy(tagsRef.current?.innerText?.replace(/\s+/g, ' '), 'tags')}
                     variant="outline"
                     size="sm"
+                    className="w-[120px]"
                   >
-                    📋 复制标签
+                    {copiedButtonId === 'tags' ? (
+                      <span className="flex items-center gap-2"> <Check size={16} /> 已复制 </span>
+                    ) : (
+                      <span className="flex items-center gap-2"> <Clipboard size={16} /> 复制标签 </span>
+                    )}
                   </Button>
                 )}
               </CardHeader>
               <CardContent>
-                <div className="flex flex-wrap gap-2">
+                <div ref={tagsRef} className="flex flex-wrap gap-2">
                   {generatedTags.map((tag, index) => (
                     <Badge key={index} variant="tag" className="cursor-pointer hover:scale-105 transition-transform">
                       #{tag}
@@ -544,22 +642,92 @@ export default function Home() {
                 </div>
                 {!loading && generatedImagePrompt && (
                   <Button
-                    onClick={() => navigator.clipboard.writeText(generatedImagePrompt)}
+                    onClick={() => handleCopy(imagePromptRef.current?.innerText, 'imagePrompt')}
                     variant="outline"
                     size="sm"
+                    className="w-[130px]" // 宽度微调
                   >
-                    📋 复制提示词
+                    {copiedButtonId === 'imagePrompt' ? (
+                      <span className="flex items-center gap-2"> <Check size={16} /> 已复制 </span>
+                    ) : (
+                      <span className="flex items-center gap-2"> <Clipboard size={16} /> 复制提示词 </span>
+                    )}
                   </Button>
                 )}
               </CardHeader>
               <CardContent>
-                <div className="prose prose-pink max-w-none text-gray-800 leading-relaxed">
+                <div ref={imagePromptRef} className="prose prose-pink max-w-none text-gray-800 leading-relaxed">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {generatedImagePrompt}
                   </ReactMarkdown>
                   {loading && (
                     <span className="inline-block w-2 h-5 bg-pink-500 animate-pulse ml-1"></span>
                   )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 首评引导卡片 - 只有当内容存在时才显示 */}
+            <Card className={!generatedSelfComment ? 'hidden' : ''}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div>
+                  <CardTitle>💬 首评关键词引导</CardTitle>
+                  <CardDescription>复制后发布在自己的评论区，提升SEO效果</CardDescription>
+                </div>
+                {!loading && generatedSelfComment && (
+                  <Button
+                    onClick={() => handleCopy(selfCommentRef.current?.innerText, 'selfComment')}
+                    variant="outline"
+                    size="sm"
+                    className="w-[120px]"
+                  >
+                    {copiedButtonId === 'selfComment' ? (
+                      <span className="flex items-center gap-2"> <Check size={16} /> 已复制 </span>
+                    ) : (
+                      <span className="flex items-center gap-2"> <Clipboard size={16} /> 复制首评 </span>
+                    )}
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent>
+                <div ref={selfCommentRef} className="prose prose-pink max-w-none text-gray-800 leading-relaxed bg-gray-50 p-3 rounded-md">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {generatedSelfComment}
+                  </ReactMarkdown>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 发布策略建议卡片 - 只有当内容存在时才显示 */}
+            <Card className={!generatedStrategy ? 'hidden' : ''}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div>
+                  <CardTitle>🚀 发布策略建议</CardTitle>
+                  <CardDescription>AI基于内容类型给出的发布时机建议</CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="prose prose-pink max-w-none text-gray-800 leading-relaxed">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {generatedStrategy}
+                  </ReactMarkdown>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 增长Playbook卡片 - 只有当内容存在时才显示 */}
+            <Card className={!generatedPlaybook ? 'hidden' : 'border-blue-200 bg-blue-50/50'}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div>
+                  <CardTitle className="text-blue-800">🚀 增长 Playbook & 数据核对清单</CardTitle>
+                  <CardDescription className="text-blue-600">将理论化为行动，系统性提升流量</CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="prose prose-blue max-w-none text-gray-800 leading-relaxed">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {generatedPlaybook}
+                  </ReactMarkdown>
                 </div>
               </CardContent>
             </Card>
@@ -624,11 +792,26 @@ export default function Home() {
             {!loading && streamContent && (
               <div className="flex gap-2">
                 <Button
-                  onClick={() => navigator.clipboard.writeText(streamContent)}
+                  onClick={() => {
+                    // 将所有部分的 innerText 拼接起来
+                    const fullText = [
+                      titlesRef.current?.innerText,
+                      bodyRef.current?.innerText,
+                      tagsRef.current?.innerText?.replace(/\s+/g, ' '),
+                      imagePromptRef.current?.innerText,
+                      selfCommentRef.current?.innerText
+                    ].filter(Boolean).join('\n\n'); // 用两个换行符分隔，更美观
+                    handleCopy(fullText, 'full');
+                  }}
                   variant="outline"
                   size="sm"
+                  className="w-[120px]"
                 >
-                  📋 复制全文
+                  {copiedButtonId === 'full' ? (
+                    <span className="flex items-center gap-2"> <Check size={16} /> 已复制 </span>
+                  ) : (
+                    <span className="flex items-center gap-2"> <Clipboard size={16} /> 复制全文 </span>
+                  )}
                 </Button>
                 <Button
                   onClick={() => {
@@ -637,6 +820,9 @@ export default function Home() {
                     setGeneratedBody('');
                     setGeneratedTags([]);
                     setGeneratedImagePrompt('');
+                    setGeneratedSelfComment('');
+                    setGeneratedStrategy('');
+                    setGeneratedPlaybook('');
                   }}
                   variant="outline"
                   size="sm"

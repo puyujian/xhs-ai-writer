@@ -206,7 +206,36 @@ export class AIManager {
       return;
     }
 
-    if (!Array.isArray(tagStrategy.commonTags)) {
+    if (debugLoggingEnabled) {
+      console.log(`🔍 tagStrategy结构:`, JSON.stringify(tagStrategy, null, 2));
+    }
+
+    // 检查 commonTags 字段
+    if (!tagStrategy.commonTags) {
+      if (debugLoggingEnabled) {
+        console.log(`⚠️ commonTags字段不存在，尝试从其他字段提取`);
+      }
+      // 如果 commonTags 不存在，尝试从 tagCategories 中提取
+      if (tagStrategy.tagCategories) {
+        const extractedTags = [];
+        if (Array.isArray(tagStrategy.tagCategories.coreKeywords)) {
+          extractedTags.push(...tagStrategy.tagCategories.coreKeywords);
+        }
+        if (Array.isArray(tagStrategy.tagCategories.longTailKeywords)) {
+          extractedTags.push(...tagStrategy.tagCategories.longTailKeywords);
+        }
+        tagStrategy.commonTags = extractedTags.slice(0, 10); // 取前10个作为常用标签
+        if (debugLoggingEnabled) {
+          console.log(`🔧 自动生成commonTags:`, tagStrategy.commonTags);
+        }
+      } else {
+        tagStrategy.commonTags = []; // 设置默认空数组
+      }
+    } else if (!Array.isArray(tagStrategy.commonTags)) {
+      if (debugLoggingEnabled) {
+        console.log(`⚠️ commonTags不是数组，类型为:`, typeof tagStrategy.commonTags);
+        console.log(`⚠️ commonTags内容:`, tagStrategy.commonTags);
+      }
       errors.push('tagStrategy.commonTags应该是数组');
     }
 

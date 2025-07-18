@@ -2,6 +2,7 @@ import { getGenerationPrompt } from '@/lib/prompts';
 import { ERROR_MESSAGES, HTTP_STATUS } from '@/lib/constants';
 import { aiManager } from '@/lib/ai-manager';
 import { filterSensitiveContent, detectSensitiveWords } from '@/lib/sensitive-words';
+import { sanitizeText } from '@/lib/utils';
 
 // AI交互现在通过aiManager统一管理
 
@@ -34,10 +35,16 @@ export async function POST(request: Request) {
           generatePrompt,
           // onChunk: 处理每个内容块
           (content: string) => {
-            // 累积内容用于检测
-            accumulatedContent += content;
+            // ======================================================================
+            // ========================= 核心优化点在这里 =========================
+            // ======================================================================
 
-            let chunkToSend = content;
+            // 第一步：净化文本，移除潜在的零宽字符等水印
+            let cleanContent = sanitizeText(content);
+
+            // 后续所有操作都使用净化后的 cleanContent
+            accumulatedContent += cleanContent;
+            let chunkToSend = cleanContent;
 
             // 如果内容尚未开始，检查当前累积内容是否包含开始标记
             if (!contentStarted) {
