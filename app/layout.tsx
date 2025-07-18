@@ -20,11 +20,20 @@ export const metadata: Metadata = {
     description: '使用AI小红书爆款文案生成器，通过智能分析热门笔记，一键创作出充满"人味"的高质量标题、正文和标签，轻松提升您的笔记流量。',
     type: 'website',
     locale: 'zh_CN',
+    images: [
+      {
+        url: '/og-image.svg',
+        width: 1200,
+        height: 630,
+        alt: 'AI小红书爆款文案生成器 - 智能分析与一键创作工具',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'AI小红书爆款文案生成器 - 智能分析与一键创作工具',
     description: '使用AI小红书爆款文案生成器，通过智能分析热门笔记，一键创作出充满"人味"的高质量标题、正文和标签，轻松提升您的笔记流量。',
+    images: ['/og-image.svg'],
   },
 }
 
