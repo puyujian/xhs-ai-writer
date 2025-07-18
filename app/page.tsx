@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { formatErrorForUser } from '@/lib/error-handler'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import Link from 'next/link'
 // ======================================================================
 // ========================= 核心优化点 1/4 =========================
 // ======================================================================
@@ -417,9 +418,25 @@ export default function Home() {
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
             🔥 AI小红书爆款文案生成器
           </h1>
-          <p className="text-lg text-gray-600">
+          <p className="text-lg text-gray-600 mb-4">
             智能分析热门笔记，实时生成爆款文案
           </p>
+          <div className="flex justify-center gap-4">
+            <Link
+              href="/blog"
+              className="inline-flex items-center px-4 py-2 text-sm text-purple-600 hover:text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-50 transition-colors"
+            >
+              📚 写作攻略
+            </Link>
+            <a
+              href="https://github.com/EBOLABOY/xhs-ai-writer"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center px-4 py-2 text-sm text-gray-600 hover:text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              ⭐ GitHub
+            </a>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
