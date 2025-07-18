@@ -7,9 +7,45 @@ export const metadata: Metadata = {
   keywords: '小红书爆款秘诀,小红书写作技巧,AI写作局限,小红书内容创作,小红书流量密码',
 }
 
+function ArticleStructuredData() {
+  const articleData = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "5个AI也无法替代的小红书爆款秘诀",
+    "image": "https://xhs-ai-writer.vercel.app/og-image.svg",
+    "datePublished": "2024-01-15T08:00:00+08:00",
+    "dateModified": "2024-01-15T08:00:00+08:00",
+    "author": {
+      "@type": "Organization",
+      "name": "AI小红书爆款文案生成器"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "AI小红书爆款文案生成器",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://xhs-ai-writer.vercel.app/og-image.svg"
+      }
+    },
+    "description": "揭秘那些连AI都学不会的小红书爆款创作技巧，包括情感共鸣、真实体验、互动设计等核心要素，让你的笔记在千万内容中脱颖而出。",
+    "mainEntityOfPage": {
+      "@type": "WebPage",
+      "@id": "https://xhs-ai-writer.vercel.app/blog/ai-xiaohongshu-secrets"
+    }
+  };
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(articleData) }}
+    />
+  );
+}
+
 export default function BlogPost() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-50">
+    <>
+      <ArticleStructuredData />
+      <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-50">
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
           <article className="bg-white rounded-xl shadow-lg p-8">
@@ -116,5 +152,6 @@ export default function BlogPost() {
         </div>
       </div>
     </div>
+    </>
   )
 }
