@@ -293,14 +293,19 @@ export async function POST(request: Request) {
     // 智能获取热门笔记数据（缓存优先）
     const scrapedContent = await fetchHotPostsWithCache(keyword);
 
-    // 对抓取内容进行安全转义，防止破坏JSON格式
-    const safeContent = scrapedContent
-      .replace(/```/g, '´´´')  // 转义代码块标记
-      .replace(/"/g, '\\"')    // 转义双引号
-      .replace(/\\/g, '\\\\')  // 转义反斜杠
-      .replace(/\n/g, '\\n')   // 转义换行符
-      .replace(/\r/g, '\\r')   // 转义回车符
-      .replace(/\t/g, '\\t');  // 转义制表符
+    // 简化内容处理，只处理可能破坏提示词结构的字符
+    let safeContent = scrapedContent
+      .replace(/```/g, '´´´')  // 转义代码块标记，防止破坏Markdown结构
+      .trim(); // 移除首尾空白字符
+
+    // 限制内容长度，防止提示词过长导致AI响应异常
+    const MAX_CONTENT_LENGTH = 8000; // 约8000字符，为提示词留出足够空间
+    if (safeContent.length > MAX_CONTENT_LENGTH) {
+      safeContent = safeContent.substring(0, MAX_CONTENT_LENGTH) + '\n\n[内容因长度限制被截断...]';
+      if (debugLoggingEnabled) {
+        console.log(`⚠️ 内容过长已截断: ${scrapedContent.length} -> ${safeContent.length} 字符`);
+      }
+    }
 
     // 使用模块化的分析提示词
     const analysisPrompt = getAnalysisPrompt(safeContent);

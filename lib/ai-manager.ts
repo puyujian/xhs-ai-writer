@@ -292,16 +292,52 @@ export class AIManager {
           }
 
           const client = this.getClient();
-          const response = await client.chat.completions.create({
+
+          // 为Gemini模型调整请求参数
+          const requestParams: any = {
             model: currentModel,
             messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" },
             temperature: CONFIG.TEMPERATURE,
-          });
+          };
+
+          // 只有在非Gemini模型时才使用response_format
+          // Gemini模型对json_object格式支持有限，可能导致空响应
+          if (!currentModel.toLowerCase().includes('gemini')) {
+            requestParams.response_format = { type: "json_object" };
+          }
+          // 注意：不设置max_tokens，让模型自然生成完整响应
+
+          const response = await client.chat.completions.create(requestParams);
+
+          // [核心修复] 增加对 response.choices 的有效性检查
+          if (!response || !response.choices || response.choices.length === 0) {
+            console.error('❌ AI响应结构异常或choices为空');
+            console.error('📊 响应对象存在:', !!response);
+            console.error('📊 choices字段存在:', !!(response && response.choices));
+            console.error('📊 choices长度:', response && response.choices ? response.choices.length : 'N/A');
+            console.error('📊 响应结构:', response ? Object.keys(response) : 'response为null/undefined');
+            console.error('📊 模型:', currentModel);
+            console.error('📊 尝试次数:', attempt + 1);
+
+            // 只在调试模式下输出完整响应，避免日志过长
+            if (debugLoggingEnabled && response) {
+              console.error('📄 完整响应:', JSON.stringify(response, null, 2));
+            }
+
+            throw new Error(`AI响应结构异常，缺少choices字段或choices为空数组 (模型: ${currentModel}, 尝试: ${attempt + 1})`);
+          }
 
           const content = response.choices[0]?.message?.content;
-          if (!content) {
-            throw new Error('AI返回了空响应');
+          if (!content || content.trim() === '') {
+            // 检查finish_reason来提供更详细的错误信息
+            const finishReason = response.choices[0]?.finish_reason;
+            if (finishReason === 'length') {
+              throw new Error('AI响应被截断，可能是因为max_tokens设置过小或模型对JSON格式支持有限');
+            } else if (finishReason === 'content_filter') {
+              throw new Error('AI响应被内容过滤器阻止');
+            } else {
+              throw new Error(`AI返回了空响应，finish_reason: ${finishReason}`);
+            }
           }
 
           // 验证响应
@@ -384,6 +420,14 @@ export class AIManager {
         let lastChunkTime = Date.now();
 
         for await (const chunk of response) {
+          // [核心修复] 增加对 chunk.choices 的有效性检查
+          if (!chunk || !chunk.choices || chunk.choices.length === 0) {
+            if (debugLoggingEnabled) {
+              console.warn('⚠️ 流式响应块缺少choices字段，跳过此块');
+            }
+            continue;
+          }
+
           const content = chunk.choices[0]?.delta?.content || '';
           if (content) {
             hasContent = true;
