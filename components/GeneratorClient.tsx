@@ -570,10 +570,10 @@ export default function GeneratorClient() {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-6 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
       {/* 历史记录面板 - 桌面端显示，移动端通过按钮切换 */}
       <div className={`lg:col-span-1 ${showHistoryPanel ? 'block' : 'hidden'} lg:block ${showHistoryPanel ? 'fixed inset-0 z-50 bg-black/50 lg:static lg:bg-transparent lg:z-auto' : ''}`}>
-        <div className={`${showHistoryPanel ? 'absolute right-0 top-0 h-full w-80 lg:static lg:w-auto' : ''}`}>
+        <div className={`${showHistoryPanel ? 'absolute right-0 top-0 h-full w-80 lg:static lg:w-auto' : ''} lg:min-w-[280px]`}>
           <HistoryPanel 
             onRestore={handleRestoreHistory}
             className={`h-full lg:h-[calc(100vh-12rem)] ${showHistoryPanel ? 'shadow-2xl lg:shadow-none' : ''}`}
@@ -709,7 +709,7 @@ export default function GeneratorClient() {
       </div>
 
       {/* 结果区域 */}
-      <div className="lg:col-span-3 space-y-6">
+      <div className="lg:col-span-2 space-y-6">
         {/* 标题卡片 */}
         <Card className={!loading && !streamContent ? 'hidden' : ''}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

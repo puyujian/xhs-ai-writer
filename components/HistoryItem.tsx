@@ -69,62 +69,56 @@ export default function HistoryItemComponent({
   }
 
   return (
-    <Card className="mb-3 hover:shadow-lg hover:scale-[1.02] transition-all duration-300 border-l-4 border-l-pink-400 bg-gradient-to-r from-white to-pink-50/30">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
+    <Card className="mb-2 hover:shadow-md transition-all duration-200 border-l-2 border-l-pink-400 bg-white/90">
+      <CardHeader className="pb-2 px-3 py-3">
+        <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <CardTitle className="text-base md:text-lg truncate text-gray-800 font-semibold">
-              <span className="text-pink-500">🎯</span> {item.keyword}
+            <CardTitle className="text-sm font-medium text-gray-800 flex items-center gap-1.5 mb-1">
+              <span className="text-pink-500 text-xs">🎯</span>
+              <span className="truncate">{item.keyword}</span>
             </CardTitle>
-            <CardDescription className="flex items-center gap-2 mt-1 text-xs md:text-sm">
-              <Clock size={12} className="text-gray-400" />
-              <span className="text-gray-500">{formatTime(item.timestamp)}</span>
+            <CardDescription className="flex items-center gap-2 text-xs text-gray-500">
+              <span className="flex items-center gap-1">
+                <Clock size={10} className="text-gray-400" />
+                {formatTime(item.timestamp)}
+              </span>
               {item.generatedTags.length > 0 && (
-                <>
-                  <span className="text-gray-300">•</span>
-                  <Badge variant="secondary" className="text-xs bg-pink-100 text-pink-700 border-pink-200">
-                    {item.generatedTags.length}个标签
-                  </Badge>
-                </>
+                <Badge variant="outline" className="bg-pink-50 text-pink-600 border-pink-200 text-xs px-1.5 py-0">
+                  {item.generatedTags.length}
+                </Badge>
               )}
             </CardDescription>
           </div>
-          
-          <div className="flex items-center gap-1 ml-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="h-8 w-8 p-0 hover:bg-pink-100 transition-colors"
-            >
-              {isExpanded ? (
-                <ChevronUp size={16} className="text-gray-600" />
-              ) : (
-                <Eye size={16} className="text-gray-600" />
-              )}
-            </Button>
-          </div>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="h-6 w-6 p-0 hover:bg-pink-50 flex-shrink-0"
+          >
+            {isExpanded ? (
+              <ChevronUp size={12} className="text-gray-500" />
+            ) : (
+              <Eye size={12} className="text-gray-500" />
+            )}
+          </Button>
         </div>
       </CardHeader>
 
-      <CardContent className="pt-0">
+      <CardContent className="pt-0 px-3 pb-3">
         {/* 内容预览 */}
         {!isExpanded && (
-          <div className="space-y-3">
+          <div className="space-y-1.5">
             {item.generatedTitles && (
-              <div className="bg-gradient-to-r from-pink-50 to-transparent p-3 rounded-lg border-l-2 border-pink-300">
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-pink-600 mb-1">
-                  <span>✨</span> 标题预览
-                </span>
-                <p className="text-sm text-gray-700 leading-relaxed">{getPreview(item.generatedTitles)}</p>
+              <div className="bg-pink-50/50 p-1.5 rounded text-xs">
+                <span className="font-medium text-pink-600 block mb-0.5">✨ 标题预览</span>
+                <p className="text-gray-700 leading-tight truncate">{getPreview(item.generatedTitles)}</p>
               </div>
             )}
             {item.generatedBody && (
-              <div className="bg-gradient-to-r from-blue-50 to-transparent p-3 rounded-lg border-l-2 border-blue-300">
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 mb-1">
-                  <span>📝</span> 正文预览
-                </span>
-                <p className="text-sm text-gray-700 leading-relaxed">{getPreview(item.generatedBody)}</p>
+              <div className="bg-blue-50/50 p-1.5 rounded text-xs">
+                <span className="font-medium text-blue-600 block mb-0.5">📝 正文预览</span>
+                <p className="text-gray-700 leading-tight truncate">{getPreview(item.generatedBody)}</p>
               </div>
             )}
           </div>
@@ -220,53 +214,34 @@ export default function HistoryItemComponent({
         )}
 
         {/* 操作按钮 */}
-        <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-gradient-to-r from-pink-100 to-blue-100">
+        <div className="flex gap-1 pt-2 border-t border-gray-100">
           <Button
-            variant="outline"
-            size="sm"
             onClick={() => onRestore(item)}
-            className="flex items-center gap-1.5 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 text-green-700 hover:bg-gradient-to-r hover:from-green-100 hover:to-emerald-100 transition-all duration-200"
+            variant="default"
+            size="sm"
+            className="flex-1 h-7 text-xs bg-gradient-to-r from-pink-500 to-blue-500 hover:from-pink-600 hover:to-blue-600 text-white border-0"
           >
-            <RotateCcw size={14} />
-            <span className="hidden sm:inline">恢复使用</span>
-            <span className="sm:hidden">恢复</span>
+            <RotateCcw size={11} className="mr-1" />
+            恢复
           </Button>
-          
+
           <Button
+            onClick={handleCopyAll}
             variant="outline"
             size="sm"
-            onClick={handleCopyAll}
-            className="flex items-center gap-1.5 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 text-blue-700 hover:bg-gradient-to-r hover:from-blue-100 hover:to-indigo-100 transition-all duration-200"
+            className="flex-1 h-7 text-xs border-blue-200 text-blue-600 hover:bg-blue-50"
           >
-            <Copy size={14} />
-            <span className="hidden sm:inline">复制全文</span>
-            <span className="sm:hidden">复制</span>
+            <Copy size={11} className="mr-1" />
+            复制
           </Button>
-
-          {isExpanded && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsExpanded(false)}
-              className="flex items-center gap-1.5 text-gray-600 hover:text-gray-700 hover:bg-gray-100 transition-all duration-200"
-            >
-              <ChevronUp size={14} />
-              <span className="hidden sm:inline">收起详情</span>
-              <span className="sm:hidden">收起</span>
-            </Button>
-          )}
-
-          <div className="flex-1"></div>
           
           <Button
-            variant="ghost"
-            size="sm"
             onClick={() => onDelete(item.id)}
-            className="flex items-center gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-all duration-200"
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs border-red-200 text-red-600 hover:bg-red-50"
           >
-            <Trash2 size={14} />
-            <span className="hidden sm:inline">删除</span>
-            <span className="sm:hidden">删</span>
+            <Trash2 size={11} />
           </Button>
         </div>
       </CardContent>
