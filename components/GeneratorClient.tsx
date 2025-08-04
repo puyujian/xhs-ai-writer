@@ -9,7 +9,8 @@ import { Badge } from '@/components/ui/badge'
 import { formatErrorForUser } from '@/lib/error-handler'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Clipboard, Check } from 'lucide-react'
+import { Clipboard, Check, Clock, Gift } from 'lucide-react'
+import { UsageStatus, RedemptionResult } from '@/lib/types'
 
 interface ErrorState {
   title: string;
@@ -34,6 +35,15 @@ export default function GeneratorClient() {
   const [userInfo, setUserInfo] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingStage, setLoadingStage] = useState<'analyzing' | 'generating' | ''>('')
+  
+  // 使用限制相关状态
+  const [usageStatus, setUsageStatus] = useState<UsageStatus | null>(null)
+  const [loadingUsageStatus, setLoadingUsageStatus] = useState(false)
+  
+  // 兑换码相关状态
+  const [redemptionCode, setRedemptionCode] = useState('')
+  const [isRedeeming, setIsRedeeming] = useState(false)
+  const [redemptionMessage, setRedemptionMessage] = useState<{type: 'success' | 'error', text: string} | null>(null)
 
   // 分离的内容状态
   const [streamContent, setStreamContent] = useState('') // 原始完整内容
@@ -218,6 +228,69 @@ export default function GeneratorClient() {
     stopTypewriter()
   }, [stopTypewriter]);
 
+  // 获取使用状态
+  const fetchUsageStatus = useCallback(async () => {
+    setLoadingUsageStatus(true);
+    try {
+      const response = await fetch('/api/usage-status');
+      if (response.ok) {
+        const status = await response.json();
+        setUsageStatus(status);
+      }
+    } catch (error) {
+      console.error('获取使用状态失败:', error);
+    } finally {
+      setLoadingUsageStatus(false);
+    }
+  }, []);
+
+  // 兑换码处理
+  const handleRedeemCode = async () => {
+    if (!redemptionCode.trim()) {
+      setRedemptionMessage({ type: 'error', text: '请输入兑换码' });
+      return;
+    }
+
+    setIsRedeeming(true);
+    setRedemptionMessage(null);
+
+    try {
+      const response = await fetch('/api/redeem-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ code: redemptionCode }),
+      });
+
+      const result: RedemptionResult = await response.json();
+
+      if (result.success) {
+        setRedemptionMessage({ type: 'success', text: result.message });
+        setRedemptionCode('');
+        
+        // 更新使用状态
+        if (result.newUsageStatus) {
+          setUsageStatus(result.newUsageStatus);
+        } else {
+          await fetchUsageStatus();
+        }
+      } else {
+        setRedemptionMessage({ type: 'error', text: result.message });
+      }
+    } catch (error) {
+      console.error('兑换码使用失败:', error);
+      setRedemptionMessage({ type: 'error', text: '兑换失败，请重试' });
+    } finally {
+      setIsRedeeming(false);
+    }
+  };
+
+  // 组件初始化时获取使用状态
+  useEffect(() => {
+    fetchUsageStatus();
+  }, [fetchUsageStatus]);
+
   // 清理函数
   useEffect(() => {
     return () => {
@@ -278,6 +351,14 @@ export default function GeneratorClient() {
       })
 
       if (!streamResponse.ok) {
+        // 检查是否是使用限制错误
+        if (streamResponse.status === 403) {
+          const errorData = await streamResponse.json();
+          if (errorData.usageStatus) {
+            setUsageStatus(errorData.usageStatus);
+          }
+          throw new Error(errorData.error || '今日使用次数已达上限');
+        }
         throw new Error('生成内容失败')
       }
 
@@ -303,6 +384,8 @@ export default function GeneratorClient() {
                 stopTypewriter()
                 setLoading(false)
                 setLoadingStage('')
+                // 更新使用状态
+                fetchUsageStatus()
                 return
               }
 
@@ -392,7 +475,23 @@ export default function GeneratorClient() {
       <div className="lg:col-span-2">
         <Card>
           <CardHeader>
-            <CardTitle>📝 输入内容</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              <span>📝 输入内容</span>
+              {usageStatus && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Clock size={16} className="text-gray-500" />
+                  <span className={`${usageStatus.remaining > 0 ? 'text-green-600' : 'text-red-600'} font-medium`}>
+                    今日剩余: {usageStatus.remaining}/{usageStatus.total}
+                    {usageStatus.bonusRemaining && usageStatus.bonusRemaining > 0 && (
+                      <span className="text-blue-600 ml-1">(+{usageStatus.bonusRemaining})</span>
+                    )}
+                  </span>
+                </div>
+              )}
+              {loadingUsageStatus && (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-pink-500"></div>
+              )}
+            </CardTitle>
             <CardDescription>
               <span className="text-pink-600 font-medium">三步生成爆款文案：</span>
               <span className="text-gray-600"> 1. 输入主题 → 2. 提供素材 → 3. AI 创作</span>
@@ -463,11 +562,73 @@ export default function GeneratorClient() {
               </div>
             )}
 
+            {/* 兑换码输入 */}
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 p-4 rounded-md">
+              <div className="flex items-start gap-3">
+                <div className="text-blue-500 text-lg"><Gift /></div>
+                <div className="flex-1">
+                  <div className="font-medium text-blue-800 mb-1">🎁 有兑换码？获取额外使用次数</div>
+                  <div className="text-blue-700 text-sm mb-3">
+                    输入兑换码可以获得额外的生成机会
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="输入兑换码 (如: ABCD-EFGH-IJKL)"
+                      value={redemptionCode}
+                      onChange={(e) => setRedemptionCode(e.target.value.toUpperCase())}
+                      disabled={isRedeeming}
+                      className="flex-1 text-center font-mono"
+                      maxLength={14}
+                    />
+                    <Button
+                      onClick={handleRedeemCode}
+                      disabled={isRedeeming || !redemptionCode.trim()}
+                      variant="outline"
+                      className="bg-blue-600 text-white hover:bg-blue-700 border-blue-600"
+                    >
+                      {isRedeeming ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      ) : (
+                        '兑换'
+                      )}
+                    </Button>
+                  </div>
+
+                  {redemptionMessage && (
+                    <div className={`mt-2 text-sm ${
+                      redemptionMessage.type === 'success' ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {redemptionMessage.type === 'success' ? '✅ ' : '❌ '}
+                      {redemptionMessage.text}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {usageStatus && usageStatus.remaining === 0 && (
+              <div className="bg-amber-50 border border-amber-200 p-4 rounded-md">
+                <div className="flex items-start gap-3">
+                  <div className="text-amber-500 text-lg">⏰</div>
+                  <div className="flex-1">
+                    <div className="font-medium text-amber-800 mb-1">今日使用次数已用完</div>
+                    <div className="text-amber-700 text-sm mb-2">
+                      您今日已使用完 {usageStatus.total} 次生成机会
+                    </div>
+                    <div className="text-amber-600 text-xs">
+                      明日凌晨自动重置，或使用兑换码获取更多使用次数
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-2">
               <Button
                 onClick={handleGenerate}
-                disabled={loading || !keyword.trim() || !userInfo.trim()}
-                className="flex-1 bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600"
+                disabled={loading || !keyword.trim() || !userInfo.trim() || (usageStatus && usageStatus.remaining === 0)}
+                className="flex-1 bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <span className="flex items-center gap-2">

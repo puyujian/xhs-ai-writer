@@ -3,6 +3,14 @@
     {
       "path": "/api/cron/clean-cache",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/clean-usage",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/clean-redemption",
+      "schedule": "0 4 * * *"
     }
   ],
   "functions": {

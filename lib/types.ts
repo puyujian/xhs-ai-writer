@@ -116,3 +116,44 @@ export interface ApiError {
   details?: string;
   code?: number;
 }
+
+/**
+ * 使用限制相关接口
+ */
+export interface UsageRecord {
+  ip: string;
+  count: number;
+  lastUsed: number;
+  resetDate: string; // YYYY-MM-DD 格式
+  bonusCount?: number; // 额外获得的次数
+}
+
+export interface UsageStatus {
+  remaining: number;
+  total: number;
+  resetTime: string;
+  canUse: boolean;
+  bonusRemaining?: number; // 剩余额外次数
+}
+
+/**
+ * 兑换码相关接口
+ */
+export interface RedemptionCode {
+  code: string;
+  type: 'usage_bonus'; // 兑换码类型，目前只支持增加使用次数
+  value: number; // 增加的次数
+  isUsed: boolean;
+  usedBy?: string; // 使用者IP
+  usedAt?: number; // 使用时间戳
+  createdAt: number;
+  expiresAt: number;
+  createdBy: string; // 创建者标识
+}
+
+export interface RedemptionResult {
+  success: boolean;
+  message: string;
+  addedUsage?: number;
+  newUsageStatus?: UsageStatus;
+}

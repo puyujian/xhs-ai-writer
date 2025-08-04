@@ -22,6 +22,11 @@ export const ERROR_MESSAGES = {
   AI_CONNECTION_ERROR: 'AI连接失败',
   SERVER_ERROR: '服务器错误',
   GENERATION_CANCELLED: '生成已取消',
+  DAILY_LIMIT_EXCEEDED: '今日使用次数已达上限，请明日再试',
+  USAGE_LIMIT_ERROR: '使用限制检查失败',
+  INVALID_REDEMPTION_CODE: '兑换码无效或已过期',
+  REDEMPTION_CODE_USED: '兑换码已被使用',
+  UNAUTHORIZED_ADMIN: '管理员权限验证失败',
 } as const;
 
 // 成功消息常量
@@ -39,6 +44,15 @@ export const CONFIG = {
   TARGET_NOTES_COUNT: 40,
   MAX_PAGES: 3,
   TRACE_ID_LENGTH: 16,
+  
+  // 使用限制配置
+  DAILY_LIMIT: 10, // 每日生成次数限制
+  USAGE_RESET_HOUR: 0, // 每日重置时间（24小时制）
+  
+  // 兑换码配置
+  REDEMPTION_CODE_LENGTH: 12, // 兑换码长度
+  REDEMPTION_CODE_EXPIRY_DAYS: 30, // 兑换码有效期（天）
+  MAX_BONUS_USAGE: 100, // 单次兑换最大增加次数
 } as const;
 
 // HTTP状态码

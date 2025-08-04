@@ -3,6 +3,7 @@ import { ERROR_MESSAGES, HTTP_STATUS } from '@/lib/constants';
 import { aiManager } from '@/lib/ai-manager';
 import { filterSensitiveContent, detectSensitiveWords } from '@/lib/sensitive-words';
 import { sanitizeText } from '@/lib/utils';
+import { checkUsageLimit, recordUsage } from '@/lib/usage-limiter';
 
 // 调试日志控制
 const debugLoggingEnabled = process.env.ENABLE_DEBUG_LOGGING === 'true';
@@ -26,6 +27,37 @@ export async function POST(request: Request) {
       return new Response(ERROR_MESSAGES.MISSING_REQUIRED_PARAMS, { status: HTTP_STATUS.BAD_REQUEST });
     }
 
+    // 获取客户端IP地址
+    const clientIP = request.headers.get('x-forwarded-for') 
+      || request.headers.get('x-real-ip') 
+      || request.headers.get('cf-connecting-ip')
+      || '127.0.0.1';
+
+    // 检查使用限制
+    try {
+      const usageStatus = await checkUsageLimit(clientIP);
+      if (!usageStatus.canUse) {
+        console.log(`🚫 IP ${clientIP} 超出每日使用限制`);
+        return new Response(
+          JSON.stringify({ 
+            error: ERROR_MESSAGES.DAILY_LIMIT_EXCEEDED,
+            usageStatus: {
+              remaining: usageStatus.remaining,
+              total: usageStatus.total,
+              resetTime: usageStatus.resetTime
+            }
+          }), 
+          { 
+            status: HTTP_STATUS.FORBIDDEN,
+            headers: { 'Content-Type': 'application/json' }
+          }
+        );
+      }
+    } catch (error) {
+      console.error('使用限制检查失败:', error);
+      return new Response(ERROR_MESSAGES.USAGE_LIMIT_ERROR, { status: HTTP_STATUS.INTERNAL_SERVER_ERROR });
+    }
+
     // 使用模块化的生成提示词
     const generatePrompt = getGenerationPrompt(
       hot_post_rules ? JSON.stringify(hot_post_rules, null, 2) : '请参考小红书热门内容的一般规律',
@@ -42,11 +74,21 @@ export async function POST(request: Request) {
         const startMarker = "## 1."; // 使用更宽松的匹配，只匹配开头部分
         let accumulatedContent = ""; // 累积内容，用于检测开始标记
 
+        // 记录本次使用
+        let usageRecorded = false;
+
         // 使用AI管理器的流式生成（带重试机制）
         await aiManager.generateStreamWithRetry(
           generatePrompt,
           // onChunk: 处理每个内容块
           (content: string) => {
+            // 在第一个内容块到达时记录使用次数
+            if (!usageRecorded) {
+              recordUsage(clientIP).catch(error => {
+                console.error('记录使用次数失败:', error);
+              });
+              usageRecorded = true;
+            }
             // ======================================================================
             // ========================= 核心优化点在这里 =========================
             // ======================================================================
