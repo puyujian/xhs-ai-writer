@@ -115,18 +115,23 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
 
   return (
     <div className={`h-full flex flex-col ${className}`}>
-      <Card className="flex-1 flex flex-col">
-        <CardHeader className="flex-shrink-0 pb-4">
+      <Card className="flex-1 flex flex-col bg-gradient-to-br from-white via-pink-50/30 to-blue-50/30 border-pink-200 shadow-lg">
+        <CardHeader className="flex-shrink-0 pb-4 bg-gradient-to-r from-pink-50 to-blue-50 border-b border-pink-100">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2">
-                <History size={20} />
-                历史记录
+              <CardTitle className="flex items-center gap-2 text-gray-800">
+                <div className="p-1.5 bg-gradient-to-r from-pink-500 to-blue-500 rounded-lg">
+                  <History size={18} className="text-white" />
+                </div>
+                <span className="bg-gradient-to-r from-pink-600 to-blue-600 bg-clip-text text-transparent font-bold">
+                  历史记录
+                </span>
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="mt-1">
                 {stats && (
-                  <span>
-                    共 {stats.totalItems} 条记录，占用 {formatStorageSize(stats.storageSize)}
+                  <span className="text-xs text-gray-600 flex items-center gap-1">
+                    <span className="inline-block w-2 h-2 bg-green-400 rounded-full"></span>
+                    共 <span className="font-medium text-pink-600">{stats.totalItems}</span> 条记录，占用 <span className="font-medium text-blue-600">{formatStorageSize(stats.storageSize)}</span>
                   </span>
                 )}
               </CardDescription>
@@ -138,8 +143,9 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
                 size="sm"
                 onClick={loadHistory}
                 title="刷新"
+                className="hover:bg-white hover:shadow-sm transition-all duration-200"
               >
-                <RefreshCw size={16} />
+                <RefreshCw size={16} className="text-gray-600" />
               </Button>
               
               {allHistory.length > 0 && (
@@ -149,6 +155,7 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
                     size="sm"
                     onClick={handleExport}
                     title="导出历史记录"
+                    className="hover:bg-blue-50 hover:text-blue-600 transition-all duration-200"
                   >
                     <Download size={16} />
                   </Button>
@@ -157,7 +164,7 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
                     variant="ghost"
                     size="sm"
                     onClick={handleClearAll}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    className="text-red-500 hover:text-red-600 hover:bg-red-50 transition-all duration-200"
                     title="清空所有记录"
                   >
                     <Trash2 size={16} />
@@ -182,20 +189,24 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
 
           {/* 复制成功提示 */}
           {copiedContent && (
-            <div className="mb-3 p-2 bg-green-50 border border-green-200 rounded-md text-sm text-green-700">
-              ✅ 内容已复制到剪贴板
+            <div className="mb-3 p-3 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg text-sm text-green-700 flex items-center gap-2 shadow-sm">
+              <span className="flex-shrink-0">✅</span>
+              <span>内容已复制到剪贴板</span>
             </div>
           )}
 
           {/* 历史记录列表 */}
           <div className="flex-1 overflow-y-auto">
             {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-pink-500"></div>
-                <span className="ml-2 text-gray-600">加载中...</span>
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="relative">
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-pink-200"></div>
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-pink-500 border-t-transparent absolute top-0 left-0"></div>
+                </div>
+                <span className="mt-3 text-gray-600 text-sm">加载历史记录中...</span>
               </div>
             ) : filteredHistory.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-3 pb-4">
                 {filteredHistory.map((item) => (
                   <HistoryItemComponent
                     key={item.id}
@@ -208,32 +219,54 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
               </div>
             ) : allHistory.length > 0 ? (
               // 有历史记录但搜索结果为空
-              <div className="flex flex-col items-center justify-center py-8 text-gray-500">
-                <AlertCircle size={48} className="mb-3 opacity-50" />
-                <p className="text-lg font-medium mb-1">未找到匹配的记录</p>
-                <p className="text-sm">尝试调整搜索条件或清除筛选</p>
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="p-4 bg-gradient-to-r from-orange-50 to-amber-50 rounded-full mb-4">
+                  <AlertCircle size={32} className="text-orange-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">未找到匹配的记录</h3>
+                <p className="text-sm text-gray-600 mb-4">尝试调整搜索条件或清除筛选</p>
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <span className="inline-block w-1.5 h-1.5 bg-orange-300 rounded-full"></span>
+                  <span>共有 {allHistory.length} 条历史记录</span>
+                </div>
               </div>
             ) : (
               // 没有任何历史记录
-              <div className="flex flex-col items-center justify-center py-8 text-gray-500">
-                <History size={48} className="mb-3 opacity-50" />
-                <p className="text-lg font-medium mb-1">暂无历史记录</p>
-                <p className="text-sm text-center">
-                  生成文案后会自动保存到这里<br />
-                  方便您随时查看和重用
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="p-6 bg-gradient-to-br from-pink-50 via-blue-50 to-purple-50 rounded-2xl mb-6">
+                  <History size={40} className="text-gray-400 mx-auto" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">开始您的创作之旅</h3>
+                <p className="text-sm text-gray-600 leading-relaxed max-w-48">
+                  生成文案后会自动保存到这里，<br />
+                  方便您随时查看和重用精彩内容
                 </p>
+                <div className="mt-4 flex items-center gap-1 text-xs text-gray-500">
+                  <span className="inline-block w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
+                  <span>自动保存，安全可靠</span>
+                </div>
               </div>
             )}
           </div>
 
           {/* 存储统计信息 */}
           {stats && stats.totalItems > 0 && (
-            <div className="flex-shrink-0 mt-4 pt-3 border-t border-gray-100">
-              <div className="flex items-center justify-between text-xs text-gray-500">
-                <span>
+            <div className="flex-shrink-0 mt-4 pt-3 border-t border-gradient-to-r from-pink-100 to-blue-100">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-600 flex items-center gap-1">
+                  <span className="inline-block w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
                   最多保存 50 条记录
                 </span>
-                <Badge variant="outline" className="text-xs">
+                <Badge 
+                  variant="outline" 
+                  className={`text-xs transition-colors ${
+                    stats.totalItems >= 45 
+                      ? 'bg-orange-50 border-orange-200 text-orange-700' 
+                      : stats.totalItems >= 30 
+                      ? 'bg-yellow-50 border-yellow-200 text-yellow-700'
+                      : 'bg-green-50 border-green-200 text-green-700'
+                  }`}
+                >
                   {stats.totalItems}/50
                 </Badge>
               </div>

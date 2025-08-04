@@ -54,6 +54,7 @@ export default function GeneratorClient() {
 
   // 历史记录相关状态
   const [showHistoryPanel, setShowHistoryPanel] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'saving' | 'saved' | 'error' | null>(null)
 
   // 为每个需要复制的区域创建一个 ref
   const titlesRef = useRef<HTMLDivElement>(null);
@@ -311,7 +312,10 @@ export default function GeneratorClient() {
                 setLoadingStage('')
                 
                 // 保存到历史记录
-                saveToHistory()
+                setSaveStatus('saving')
+                setTimeout(() => {
+                  saveToHistory()
+                }, 100) // 短暂延迟确保状态更新
                 
                 return
               }
@@ -381,28 +385,125 @@ export default function GeneratorClient() {
   const saveToHistory = useCallback(() => {
     // 只有当有关键词和生成内容时才保存
     if (!keyword.trim() || !streamContent.trim()) {
+      console.log('⚠️ 保存跳过：缺少关键词或内容', { keyword: keyword.trim(), contentLength: streamContent.length });
       return;
     }
 
     try {
+      // 直接解析streamContent以确保获得完整内容
+      const parseContent = (content: string) => {
+        const titleRegex = /##\s*1[.、]?\s*(爆款标题创作|标题|生成标题)(\s*（\d+个）)?/i;
+        const bodyRegex = /##\s*2[.、]?\s*(正文内容|笔记正文|内容|正文|文案内容)/i;
+        const tagsRegex = /##\s*3[.、]?\s*(关键词标签|标签|关键词)(\s*（\d+-\d+个）)?/i;
+        const imagePromptRegex = /##\s*4[.、]?\s*(AI绘画提示词|绘画提示词|AI绘画|绘画提示)/i;
+        const selfCommentRegex = /##\s*5[.、]?\s*(首评关键词引导|首评)/i;
+        const strategyRegex = /##\s*6[.、]?\s*(发布策略建议|发布策略)/i;
+        const playbookRegex = /##\s*7[.、]?\s*(小红书增长 Playbook|增长 Playbook)/i;
+
+        const sections = [
+          { name: 'title', match: content.match(titleRegex), index: content.match(titleRegex)?.index ?? -1 },
+          { name: 'body', match: content.match(bodyRegex), index: content.match(bodyRegex)?.index ?? -1 },
+          { name: 'tags', match: content.match(tagsRegex), index: content.match(tagsRegex)?.index ?? -1 },
+          { name: 'imagePrompt', match: content.match(imagePromptRegex), index: content.match(imagePromptRegex)?.index ?? -1 },
+          { name: 'selfComment', match: content.match(selfCommentRegex), index: content.match(selfCommentRegex)?.index ?? -1 },
+          { name: 'strategy', match: content.match(strategyRegex), index: content.match(strategyRegex)?.index ?? -1 },
+          { name: 'playbook', match: content.match(playbookRegex), index: content.match(playbookRegex)?.index ?? -1 }
+        ].filter(section => section.index !== -1).sort((a, b) => a.index - b.index);
+
+        let titles = '';
+        let body = '';
+        let tags: string[] = [];
+        let imagePrompt = '';
+        let selfComment = '';
+        let strategy = '';
+        let playbook = '';
+
+        if (sections.length === 0) {
+          titles = content;
+        } else {
+          const firstSectionIndex = sections[0].index;
+          if (firstSectionIndex > 0) {
+            titles = content.substring(0, firstSectionIndex).trim();
+          }
+
+          for (let i = 0; i < sections.length; i++) {
+            const currentSection = sections[i];
+            const nextSection = sections[i + 1];
+            const startIndex = currentSection.index + (currentSection.match?.[0].length || 0);
+            const endIndex = nextSection ? nextSection.index : content.length;
+            const sectionContent = content.substring(startIndex, endIndex).trim();
+
+            switch (currentSection.name) {
+              case 'title':
+                titles = sectionContent;
+                break;
+              case 'body':
+                body = sectionContent;
+                break;
+              case 'tags':
+                const tagMatches = sectionContent.match(/#[\u4e00-\u9fa5a-zA-Z0-9_]+/g) || [];
+                const listTagMatches = sectionContent.match(/[-*]\s*([^\n]+)/g) || [];
+                const extractedTags = [
+                  ...tagMatches.map(tag => tag.replace(/^#/, '')),
+                  ...listTagMatches.map(item => item.replace(/[-*]\s*/, '').trim())
+                ];
+                tags = Array.from(new Set(extractedTags)).filter(Boolean);
+                break;
+              case 'imagePrompt':
+                imagePrompt = sectionContent;
+                break;
+              case 'selfComment':
+                selfComment = sectionContent;
+                break;
+              case 'strategy':
+                strategy = sectionContent;
+                break;
+              case 'playbook':
+                playbook = sectionContent;
+                break;
+            }
+          }
+        }
+
+        return { titles, body, tags, imagePrompt, selfComment, strategy, playbook };
+      };
+
+      const parsed = parseContent(streamContent);
+      
       historyManager.saveHistory({
         keyword: keyword.trim(),
         userInfo: userInfo.trim(),
-        generatedTitles,
-        generatedBody,
-        generatedTags,
-        generatedImagePrompt,
-        generatedSelfComment,
-        generatedStrategy,
-        generatedPlaybook
+        generatedTitles: parsed.titles,
+        generatedBody: parsed.body,
+        generatedTags: parsed.tags,
+        generatedImagePrompt: parsed.imagePrompt,
+        generatedSelfComment: parsed.selfComment,
+        generatedStrategy: parsed.strategy,
+        generatedPlaybook: parsed.playbook
       });
       
-      console.log('✅ 历史记录已自动保存');
+      console.log('✅ 历史记录已自动保存', { 
+        keyword: keyword.trim(), 
+        contentLength: streamContent.length,
+        parsedSections: {
+          titles: !!parsed.titles,
+          body: !!parsed.body,
+          tags: parsed.tags.length,
+          imagePrompt: !!parsed.imagePrompt,
+          selfComment: !!parsed.selfComment,
+          strategy: !!parsed.strategy,
+          playbook: !!parsed.playbook
+        }
+      });
+      
+      setSaveStatus('saved')
+      setTimeout(() => setSaveStatus(null), 3000)
     } catch (error) {
       console.error('保存历史记录失败:', error);
+      setSaveStatus('error')
+      setTimeout(() => setSaveStatus(null), 5000)
     }
-  }, [keyword, userInfo, streamContent, generatedTitles, generatedBody, generatedTags, 
-      generatedImagePrompt, generatedSelfComment, generatedStrategy, generatedPlaybook]);
+  }, [keyword, userInfo, streamContent]);
 
   // 恢复历史记录
   const handleRestoreHistory = useCallback((item: HistoryItem) => {
@@ -458,11 +559,20 @@ export default function GeneratorClient() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-6 gap-6">
       {/* 历史记录面板 - 桌面端显示，移动端通过按钮切换 */}
-      <div className={`lg:col-span-1 ${showHistoryPanel ? 'block' : 'hidden lg:block'}`}>
-        <HistoryPanel 
-          onRestore={handleRestoreHistory}
-          className="h-[calc(100vh-12rem)]"
-        />
+      <div className={`lg:col-span-1 ${showHistoryPanel ? 'block' : 'hidden lg:block'} ${showHistoryPanel ? 'fixed inset-0 z-50 bg-black/50 lg:static lg:bg-transparent lg:z-auto' : ''}`}>
+        <div className={`${showHistoryPanel ? 'absolute right-0 top-0 h-full w-80 lg:static lg:w-auto' : ''}`}>
+          <HistoryPanel 
+            onRestore={handleRestoreHistory}
+            className={`h-full lg:h-[calc(100vh-12rem)] ${showHistoryPanel ? 'shadow-2xl lg:shadow-none' : ''}`}
+          />
+        </div>
+        {/* 移动端遮罩层点击关闭 */}
+        {showHistoryPanel && (
+          <div 
+            className="absolute inset-0 lg:hidden" 
+            onClick={() => setShowHistoryPanel(false)}
+          />
+        )}
       </div>
 
       {/* 输入区域 */}
@@ -476,10 +586,14 @@ export default function GeneratorClient() {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowHistoryPanel(!showHistoryPanel)}
-                className="lg:hidden"
+                className={`lg:hidden transition-all duration-200 ${
+                  showHistoryPanel 
+                    ? 'bg-gradient-to-r from-pink-500 to-blue-500 text-white border-transparent shadow-md' 
+                    : 'border-pink-200 text-pink-600 hover:bg-pink-50 hover:border-pink-300'
+                }`}
               >
-                <History size={16} className="mr-1" />
-                历史
+                <History size={16} className="mr-1.5" />
+                <span className="font-medium">历史记录</span>
               </Button>
             </div>
             <CardDescription>
@@ -840,6 +954,38 @@ export default function GeneratorClient() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* 保存状态提示 */}
+        {saveStatus && (
+          <div className={`mb-4 p-3 rounded-lg border flex items-center gap-2 text-sm transition-all duration-300 ${
+            saveStatus === 'saving' 
+              ? 'bg-blue-50 border-blue-200 text-blue-700' 
+              : saveStatus === 'saved'
+              ? 'bg-green-50 border-green-200 text-green-700'
+              : 'bg-red-50 border-red-200 text-red-700'
+          }`}>
+            {saveStatus === 'saving' && (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
+                <span>正在保存到历史记录...</span>
+              </>
+            )}
+            {saveStatus === 'saved' && (
+              <>
+                <div className="flex-shrink-0 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                  <Check size={12} className="text-white" />
+                </div>
+                <span>✅ 已自动保存到历史记录</span>
+              </>
+            )}
+            {saveStatus === 'error' && (
+              <>
+                <span className="text-red-500">⚠️</span>
+                <span>保存历史记录失败，请检查浏览器设置</span>
+              </>
+            )}
+          </div>
         )}
 
         {/* 操作按钮 - 只有在生成完毕后显示 */}
