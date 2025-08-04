@@ -7,9 +7,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatErrorForUser } from '@/lib/error-handler'
+import { historyManager } from '@/lib/history-manager'
+import { HistoryItem } from '@/lib/history-types'
+import HistoryPanel from './HistoryPanel'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Clipboard, Check } from 'lucide-react'
+import { Clipboard, Check, History } from 'lucide-react'
 
 interface ErrorState {
   title: string;
@@ -48,6 +51,9 @@ export default function GeneratorClient() {
   const [error, setError] = useState<ErrorState | null>(null)
   const [retryCount, setRetryCount] = useState(0)
   const abortControllerRef = useRef<AbortController | null>(null)
+
+  // 历史记录相关状态
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false)
 
   // 为每个需要复制的区域创建一个 ref
   const titlesRef = useRef<HTMLDivElement>(null);
@@ -303,6 +309,10 @@ export default function GeneratorClient() {
                 stopTypewriter()
                 setLoading(false)
                 setLoadingStage('')
+                
+                // 保存到历史记录
+                saveToHistory()
+                
                 return
               }
 
@@ -367,6 +377,65 @@ export default function GeneratorClient() {
     handleGenerate();
   }
 
+  // 保存到历史记录
+  const saveToHistory = useCallback(() => {
+    // 只有当有关键词和生成内容时才保存
+    if (!keyword.trim() || !streamContent.trim()) {
+      return;
+    }
+
+    try {
+      historyManager.saveHistory({
+        keyword: keyword.trim(),
+        userInfo: userInfo.trim(),
+        generatedTitles,
+        generatedBody,
+        generatedTags,
+        generatedImagePrompt,
+        generatedSelfComment,
+        generatedStrategy,
+        generatedPlaybook
+      });
+      
+      console.log('✅ 历史记录已自动保存');
+    } catch (error) {
+      console.error('保存历史记录失败:', error);
+    }
+  }, [keyword, userInfo, streamContent, generatedTitles, generatedBody, generatedTags, 
+      generatedImagePrompt, generatedSelfComment, generatedStrategy, generatedPlaybook]);
+
+  // 恢复历史记录
+  const handleRestoreHistory = useCallback((item: HistoryItem) => {
+    setKeyword(item.keyword);
+    setUserInfo(item.userInfo);
+    setStreamContent(''); // 先清空流内容
+    setGeneratedTitles(item.generatedTitles);
+    setGeneratedBody(item.generatedBody);
+    setGeneratedTags(item.generatedTags);
+    setGeneratedImagePrompt(item.generatedImagePrompt);
+    setGeneratedSelfComment(item.generatedSelfComment);
+    setGeneratedStrategy(item.generatedStrategy);
+    setGeneratedPlaybook(item.generatedPlaybook);
+    
+    // 重新构建完整内容用于显示
+    const fullContent = [
+      item.generatedTitles,
+      item.generatedBody,
+      item.generatedTags.join(' '),
+      item.generatedImagePrompt,
+      item.generatedSelfComment,
+      item.generatedStrategy,
+      item.generatedPlaybook
+    ].filter(Boolean).join('\n\n');
+    
+    setStreamContent(fullContent);
+    
+    // 可选：关闭历史记录面板
+    setShowHistoryPanel(false);
+    
+    console.log('✅ 历史记录已恢复');
+  }, []);
+
   // 通用的、带反馈的复制处理函数
   const handleCopy = (textToCopy: string | undefined, buttonId: string) => {
     if (!textToCopy) return;
@@ -387,12 +456,32 @@ export default function GeneratorClient() {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-6 gap-6">
+      {/* 历史记录面板 - 桌面端显示，移动端通过按钮切换 */}
+      <div className={`lg:col-span-1 ${showHistoryPanel ? 'block' : 'hidden lg:block'}`}>
+        <HistoryPanel 
+          onRestore={handleRestoreHistory}
+          className="h-[calc(100vh-12rem)]"
+        />
+      </div>
+
       {/* 输入区域 */}
       <div className="lg:col-span-2">
         <Card>
           <CardHeader>
-            <CardTitle>📝 输入内容</CardTitle>
+            <div className="flex items-center justify-between mb-2">
+              <CardTitle>📝 输入内容</CardTitle>
+              {/* 移动端历史记录切换按钮 */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowHistoryPanel(!showHistoryPanel)}
+                className="lg:hidden"
+              >
+                <History size={16} className="mr-1" />
+                历史
+              </Button>
+            </div>
             <CardDescription>
               <span className="text-pink-600 font-medium">三步生成爆款文案：</span>
               <span className="text-gray-600"> 1. 输入主题 → 2. 提供素材 → 3. AI 创作</span>
