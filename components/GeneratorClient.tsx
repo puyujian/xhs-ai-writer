@@ -51,6 +51,7 @@ export default function GeneratorClient() {
   const [error, setError] = useState<ErrorState | null>(null)
   const [retryCount, setRetryCount] = useState(0)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const fullContentRef = useRef<string>('') // 用于实时跟踪完整内容
 
   // 历史记录相关状态
   const [showHistoryPanel, setShowHistoryPanel] = useState(false)
@@ -214,6 +215,7 @@ export default function GeneratorClient() {
   const resetOutputStates = useCallback(() => {
     setStreamContent('')
     setDisplayContent('')
+    fullContentRef.current = '' // 重置完整内容引用
     setGeneratedTitles('')
     setGeneratedBody('')
     setGeneratedTags([])
@@ -314,7 +316,7 @@ export default function GeneratorClient() {
                 // 保存到历史记录
                 setSaveStatus('saving')
                 setTimeout(() => {
-                  saveToHistory()
+                  saveToHistory(fullContentRef.current) // 使用实时内容引用
                 }, 100) // 短暂延迟确保状态更新
                 
                 return
@@ -336,6 +338,8 @@ export default function GeneratorClient() {
 
                   // 同时更新完整内容用于备份
                   setStreamContent(prev => prev + parsed.content)
+                  // 实时更新完整内容引用
+                  fullContentRef.current += parsed.content
                 } else if (parsed.error) {
                   throw new Error(parsed.error)
                 }
@@ -382,9 +386,9 @@ export default function GeneratorClient() {
   }
 
   // 保存到历史记录
-  const saveToHistory = useCallback(() => {
-    // 使用displayContent或streamContent，优先使用有内容的那个
-    const contentToSave = displayContent.trim() || streamContent.trim();
+  const saveToHistory = useCallback((forcedContent?: string) => {
+    // 如果传入了强制内容，使用它；否则使用状态中的内容
+    const contentToSave = forcedContent?.trim() || displayContent.trim() || streamContent.trim();
     
     // 只有当有关键词和生成内容时才保存
     if (!keyword.trim() || !contentToSave) {
@@ -392,6 +396,7 @@ export default function GeneratorClient() {
         keyword: keyword.trim(), 
         streamContentLength: streamContent.length,
         displayContentLength: displayContent.length,
+        forcedContentLength: forcedContent?.length || 0,
         contentToSave: contentToSave.length 
       });
       return;
