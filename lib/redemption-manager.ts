@@ -92,7 +92,7 @@ async function saveRedemptionCodes(codes: Record<string, RedemptionCode>): Promi
  */
 function verifyAdminPermission(adminKey: string): boolean {
   const validAdminKey = process.env.ADMIN_KEY;
-  return validAdminKey && adminKey === validAdminKey;
+  return !!(validAdminKey && adminKey === validAdminKey);
 }
 
 /**
