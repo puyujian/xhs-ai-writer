@@ -2,6 +2,9 @@ import { NextRequest } from 'next/server';
 import { checkUsageLimit } from '@/lib/usage-limiter';
 import { HTTP_STATUS } from '@/lib/constants';
 
+// 强制动态渲染
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     // 获取客户端IP地址

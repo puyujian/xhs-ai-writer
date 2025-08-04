@@ -2,6 +2,9 @@ import { NextRequest } from 'next/server';
 import { generateRedemptionCode } from '@/lib/redemption-manager';
 import { HTTP_STATUS, ERROR_MESSAGES } from '@/lib/constants';
 
+// 强制动态渲染
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     const { value, adminKey, description } = await request.json();

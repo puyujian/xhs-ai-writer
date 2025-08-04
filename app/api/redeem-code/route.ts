@@ -3,6 +3,9 @@ import { useRedemptionCode } from '@/lib/redemption-manager';
 import { addBonusUsage, checkUsageLimit } from '@/lib/usage-limiter';
 import { HTTP_STATUS } from '@/lib/constants';
 
+// 强制动态渲染
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     const { code } = await request.json();

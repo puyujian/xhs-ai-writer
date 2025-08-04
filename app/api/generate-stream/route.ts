@@ -5,6 +5,9 @@ import { filterSensitiveContent, detectSensitiveWords } from '@/lib/sensitive-wo
 import { sanitizeText } from '@/lib/utils';
 import { checkUsageLimit, recordUsage } from '@/lib/usage-limiter';
 
+// 强制动态渲染
+export const dynamic = 'force-dynamic';
+
 // 调试日志控制
 const debugLoggingEnabled = process.env.ENABLE_DEBUG_LOGGING === 'true';
 
