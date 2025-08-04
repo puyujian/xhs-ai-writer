@@ -116,3 +116,12 @@ export interface ApiError {
   details?: string;
   code?: number;
 }
+
+// 导出历史记录相关类型
+export type {
+  HistoryItem,
+  HistoryManagerConfig,
+  HistorySearchOptions,
+  HistoryExportOptions,
+  HistoryStats
+} from './history-types';
