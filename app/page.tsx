@@ -1,22 +1,5 @@
-import Link from 'next/link'
-import dynamic from 'next/dynamic'
 import GeneratorClient from '@/components/GeneratorClient'
 import FaqSection from '@/components/FaqSection'
-
-// 动态导入作者卡片组件，减少首次加载的资源体积
-const AuthorCard = dynamic(() => import('@/components/AuthorCard'), {
-  loading: () => (
-    <div className="bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-lg p-6 animate-pulse">
-      <div className="flex flex-col items-center gap-4">
-        <div className="h-6 bg-gray-200 rounded w-48"></div>
-        <div className="h-4 bg-gray-200 rounded w-96"></div>
-        <div className="h-4 bg-gray-200 rounded w-80"></div>
-        <div className="h-12 bg-gray-200 rounded w-64"></div>
-        <div className="h-3 bg-gray-200 rounded w-72"></div>
-      </div>
-    </div>
-  ),
-})
 
 export default function Home() {
   return (
@@ -29,30 +12,7 @@ export default function Home() {
           <p className="text-lg text-gray-600 mb-4">
             智能分析热门笔记，实时生成爆款文案
           </p>
-          <div className="flex justify-center gap-4 flex-wrap">
-            <Link
-              href="/blog"
-              className="inline-flex items-center px-4 py-2 text-sm text-purple-600 hover:text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-50 transition-colors"
-            >
-              📚 写作攻略
-            </Link>
-            <a
-              href="https://www.xiaohongshu.com/user/profile/5e141963000000000100158e"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center px-4 py-2 text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
-            >
-              📱 关注作者小红书
-            </a>
-            <a
-              href="https://github.com/EBOLABOY/xhs-ai-writer"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center px-4 py-2 text-sm text-gray-600 hover:text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              ⭐ GitHub
-            </a>
-          </div>
+
         </div>
 
         <GeneratorClient />
@@ -60,10 +20,7 @@ export default function Home() {
         {/* FAQ区域 */}
         <FaqSection />
 
-        {/* 作者信息区域 */}
-        <div className="mt-12 text-center">
-          <AuthorCard />
-        </div>
+
       </div>
     </div>
   )
