@@ -61,6 +61,21 @@ export async function POST(request: Request) {
       return new Response(ERROR_MESSAGES.USAGE_LIMIT_ERROR, { status: HTTP_STATUS.INTERNAL_SERVER_ERROR });
     }
 
+    // 立即记录本次使用（在开始生成内容前）
+    try {
+      await recordUsage(clientIP);
+      console.log(`✅ 成功记录使用次数 - IP: ${clientIP}`);
+    } catch (error) {
+      console.error('❌ 记录使用次数失败:', error);
+      return new Response(
+        JSON.stringify({ error: '记录使用失败，请重试' }), 
+        { 
+          status: HTTP_STATUS.INTERNAL_SERVER_ERROR,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
     // 使用模块化的生成提示词
     const generatePrompt = getGenerationPrompt(
       hot_post_rules ? JSON.stringify(hot_post_rules, null, 2) : '请参考小红书热门内容的一般规律',
@@ -77,21 +92,11 @@ export async function POST(request: Request) {
         const startMarker = "## 1."; // 使用更宽松的匹配，只匹配开头部分
         let accumulatedContent = ""; // 累积内容，用于检测开始标记
 
-        // 记录本次使用
-        let usageRecorded = false;
-
         // 使用AI管理器的流式生成（带重试机制）
         await aiManager.generateStreamWithRetry(
           generatePrompt,
           // onChunk: 处理每个内容块
           (content: string) => {
-            // 在第一个内容块到达时记录使用次数
-            if (!usageRecorded) {
-              recordUsage(clientIP).catch(error => {
-                console.error('记录使用次数失败:', error);
-              });
-              usageRecorded = true;
-            }
             // ======================================================================
             // ========================= 核心优化点在这里 =========================
             // ======================================================================

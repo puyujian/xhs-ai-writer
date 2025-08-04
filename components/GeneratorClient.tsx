@@ -478,18 +478,31 @@ export default function GeneratorClient() {
             <CardTitle className="flex items-center justify-between">
               <span>📝 输入内容</span>
               {usageStatus && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Clock size={16} className="text-gray-500" />
-                  <span className={`${usageStatus.remaining > 0 ? 'text-green-600' : 'text-red-600'} font-medium`}>
-                    今日剩余: {usageStatus.remaining}/{usageStatus.total}
+                <div 
+                  className="flex items-center gap-3 text-sm bg-gray-50 hover:bg-gray-100 px-3 py-2 rounded-lg cursor-pointer transition-colors group"
+                  onClick={fetchUsageStatus}
+                  title="点击刷新使用次数"
+                >
+                  <Clock size={16} className="text-gray-500 group-hover:text-gray-700" />
+                  <div className="flex items-center gap-2">
+                    <span className={`text-2xl font-bold ${usageStatus.remaining > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {usageStatus.remaining}
+                    </span>
+                    <span className="text-gray-400">/</span>
+                    <span className="text-gray-600 font-medium">{usageStatus.total}</span>
                     {usageStatus.bonusRemaining && usageStatus.bonusRemaining > 0 && (
-                      <span className="text-blue-600 ml-1">(+{usageStatus.bonusRemaining})</span>
+                      <span className="text-blue-600 text-xs bg-blue-50 px-2 py-1 rounded-full">
+                        +{usageStatus.bonusRemaining}
+                      </span>
                     )}
-                  </span>
+                  </div>
                 </div>
               )}
               {loadingUsageStatus && (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-pink-500"></div>
+                <div className="flex items-center gap-2 text-sm">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-pink-500"></div>
+                  <span className="text-gray-500 text-xs">刷新中...</span>
+                </div>
               )}
             </CardTitle>
             <CardDescription>
