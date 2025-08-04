@@ -59,7 +59,7 @@ export default function HistorySearch({
     }
 
     // 检查是否有活动的筛选条件
-    const hasActiveFilters = searchTerm.trim() || dateRange !== 'all'
+    const hasActiveFilters = Boolean(searchTerm.trim()) || dateRange !== 'all'
     setIsFilterActive(hasActiveFilters)
 
     onSearch(options)
