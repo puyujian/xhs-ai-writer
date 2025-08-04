@@ -627,7 +627,7 @@ export default function GeneratorClient() {
             <div className="flex gap-2">
               <Button
                 onClick={handleGenerate}
-                disabled={loading || !keyword.trim() || !userInfo.trim() || (usageStatus && usageStatus.remaining === 0)}
+                disabled={loading || !keyword.trim() || !userInfo.trim() || (usageStatus?.remaining === 0)}
                 className="flex-1 bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
