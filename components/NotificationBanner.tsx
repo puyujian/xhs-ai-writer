@@ -3,7 +3,11 @@
 import { useState, useEffect } from 'react'
 import { X, MessageCircle } from 'lucide-react'
 
-export default function NotificationBanner() {
+interface NotificationBannerProps {
+  onVisibilityChange?: (visible: boolean) => void
+}
+
+export default function NotificationBanner({ onVisibilityChange }: NotificationBannerProps) {
   const [isVisible, setIsVisible] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
 
@@ -12,13 +16,17 @@ export default function NotificationBanner() {
     const hasClosedNotification = localStorage.getItem('notification-banner-closed')
     if (!hasClosedNotification) {
       setIsVisible(true)
+      onVisibilityChange?.(true)
       // 添加进入动画延迟
       setTimeout(() => setIsAnimating(true), 100)
+    } else {
+      onVisibilityChange?.(false)
     }
-  }, [])
+  }, [onVisibilityChange])
 
   const handleClose = () => {
     setIsAnimating(false)
+    onVisibilityChange?.(false)
     // 等待动画完成后隐藏
     setTimeout(() => {
       setIsVisible(false)
