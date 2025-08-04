@@ -383,9 +383,17 @@ export default function GeneratorClient() {
 
   // 保存到历史记录
   const saveToHistory = useCallback(() => {
+    // 使用displayContent或streamContent，优先使用有内容的那个
+    const contentToSave = displayContent.trim() || streamContent.trim();
+    
     // 只有当有关键词和生成内容时才保存
-    if (!keyword.trim() || !streamContent.trim()) {
-      console.log('⚠️ 保存跳过：缺少关键词或内容', { keyword: keyword.trim(), contentLength: streamContent.length });
+    if (!keyword.trim() || !contentToSave) {
+      console.log('⚠️ 保存跳过：缺少关键词或内容', { 
+        keyword: keyword.trim(), 
+        streamContentLength: streamContent.length,
+        displayContentLength: displayContent.length,
+        contentToSave: contentToSave.length 
+      });
       return;
     }
 
@@ -468,7 +476,7 @@ export default function GeneratorClient() {
         return { titles, body, tags, imagePrompt, selfComment, strategy, playbook };
       };
 
-      const parsed = parseContent(streamContent);
+      const parsed = parseContent(contentToSave);
       
       historyManager.saveHistory({
         keyword: keyword.trim(),
@@ -484,7 +492,7 @@ export default function GeneratorClient() {
       
       console.log('✅ 历史记录已自动保存', { 
         keyword: keyword.trim(), 
-        contentLength: streamContent.length,
+        contentLength: contentToSave.length,
         parsedSections: {
           titles: !!parsed.titles,
           body: !!parsed.body,
@@ -503,7 +511,7 @@ export default function GeneratorClient() {
       setSaveStatus('error')
       setTimeout(() => setSaveStatus(null), 5000)
     }
-  }, [keyword, userInfo, streamContent]);
+  }, [keyword, userInfo, streamContent, displayContent]);
 
   // 恢复历史记录
   const handleRestoreHistory = useCallback((item: HistoryItem) => {
