@@ -326,19 +326,27 @@ export class CookieManager {
   public async validateAllCookies(): Promise<void> {
     console.log('🔍 开始验证所有cookie...');
 
-    // 使用forEach代替for...of来兼容es5
-    const cookiePromises: Promise<void>[] = [];
+    const cookieArray: CookieInfo[] = [];
     this.cookies.forEach(cookie => {
-      cookiePromises.push(
-        this.validateCookie(cookie.value).then(() => {
-          // 添加延迟避免请求过于频繁
-          return new Promise<void>(resolve => setTimeout(resolve, 1000));
-        })
-      );
+      cookieArray.push(cookie);
     });
 
-    // 等待所有验证完成
-    await Promise.all(cookiePromises);
+    // 顺序验证每个cookie，避免并发请求过多
+    for (let i = 0; i < cookieArray.length; i++) {
+      const cookie = cookieArray[i];
+      console.log(`🔍 验证Cookie ${i + 1}/${cookieArray.length}: ${cookie.id}`);
+
+      try {
+        await this.validateCookie(cookie.value);
+      } catch (error) {
+        console.warn(`⚠️ Cookie ${cookie.id} 验证失败:`, error);
+      }
+
+      // 添加延迟避免请求过于频繁
+      if (i < cookieArray.length - 1) {
+        await new Promise<void>(resolve => setTimeout(resolve, 1000));
+      }
+    }
 
     console.log('✅ 所有cookie验证完成');
   }

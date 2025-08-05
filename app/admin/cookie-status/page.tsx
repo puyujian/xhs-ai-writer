@@ -45,22 +45,26 @@ export default function CookieStatusPage() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [adminKey, setAdminKey] = useState('');
   const [isValidating, setIsValidating] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [validationMessage, setValidationMessage] = useState<string | null>(null);
 
   // 获取cookie状态数据
-  const fetchCookieStatus = useCallback(async () => {
+  const fetchCookieStatus = useCallback(async (keyToUse?: string) => {
     try {
       setLoading(true);
       setError(null);
 
       const url = new URL('/api/admin/cookie-status', window.location.origin);
-      if (adminKey) {
-        url.searchParams.set('key', adminKey);
+      const currentKey = keyToUse || adminKey;
+      if (currentKey) {
+        url.searchParams.set('key', currentKey);
       }
 
       const response = await fetch(url.toString());
-      
+
       if (!response.ok) {
         if (response.status === 401) {
+          setIsAuthenticated(false);
           throw new Error('访问被拒绝，请检查管理员密钥');
         }
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -68,8 +72,10 @@ export default function CookieStatusPage() {
 
       const result = await response.json();
       setData(result);
+      setIsAuthenticated(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取数据失败');
+      setIsAuthenticated(false);
     } finally {
       setLoading(false);
     }
@@ -79,7 +85,9 @@ export default function CookieStatusPage() {
   const validateAllCookies = async () => {
     try {
       setIsValidating(true);
-      
+      setError(null);
+      setValidationMessage('正在验证所有Cookie...');
+
       const url = new URL('/api/admin/cookie-status', window.location.origin);
       url.searchParams.set('action', 'validate');
       if (adminKey) {
@@ -87,31 +95,57 @@ export default function CookieStatusPage() {
       }
 
       const response = await fetch(url.toString());
-      
+
       if (!response.ok) {
         throw new Error(`验证失败: HTTP ${response.status}`);
       }
 
-      // 验证完成后刷新数据
-      await fetchCookieStatus();
+      const result = await response.json();
+      console.log('验证结果:', result);
+
+      setValidationMessage('验证完成，正在刷新数据...');
+
+      // 等待一小段时间确保验证完成，然后刷新数据
+      setTimeout(async () => {
+        await fetchCookieStatus();
+        setValidationMessage('数据已更新！');
+        setTimeout(() => setValidationMessage(null), 3000);
+      }, 1500);
+
     } catch (err) {
       setError(err instanceof Error ? err.message : '验证失败');
+      setValidationMessage(null);
     } finally {
       setIsValidating(false);
     }
   };
 
-  // 初始加载和自动刷新
+  // 手动登录函数
+  const handleLogin = async () => {
+    if (!adminKey.trim()) {
+      setError('请输入管理员密钥');
+      return;
+    }
+    await fetchCookieStatus(adminKey.trim());
+  };
+
+  // 初始加载（仅在开发环境或已认证时）
   useEffect(() => {
-    fetchCookieStatus();
+    // 在开发环境下自动加载，生产环境需要手动输入密钥
+    if (process.env.NODE_ENV === 'development') {
+      fetchCookieStatus();
+    }
   }, [fetchCookieStatus]);
 
+  // 自动刷新（仅在已认证时）
   useEffect(() => {
-    if (!autoRefresh) return;
+    if (!autoRefresh || !isAuthenticated) return;
 
-    const interval = setInterval(fetchCookieStatus, 30000); // 30秒刷新
+    const interval = setInterval(() => {
+      fetchCookieStatus();
+    }, 30000); // 30秒刷新
     return () => clearInterval(interval);
-  }, [autoRefresh, fetchCookieStatus]);
+  }, [autoRefresh, isAuthenticated, fetchCookieStatus]);
 
   // 格式化日期
   const formatDate = (dateStr: string) => {
@@ -151,7 +185,7 @@ export default function CookieStatusPage() {
           </CardHeader>
           <CardContent>
             <p className="text-red-600 mb-4">{error}</p>
-            {error.includes('管理员密钥') && (
+            {(error.includes('管理员密钥') || error.includes('访问被拒绝')) && (
               <div className="space-y-4">
                 <div>
                   <label htmlFor="adminKey" className="block text-sm font-medium text-gray-700 mb-2">
@@ -162,15 +196,22 @@ export default function CookieStatusPage() {
                     id="adminKey"
                     value={adminKey}
                     onChange={(e) => setAdminKey(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        handleLogin();
+                      }
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="请输入管理员密钥"
+                    disabled={loading}
                   />
                 </div>
                 <button
-                  onClick={fetchCookieStatus}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  onClick={handleLogin}
+                  disabled={loading || !adminKey.trim()}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  重新访问
+                  {loading ? '验证中...' : '登录访问'}
                 </button>
               </div>
             )}
@@ -186,6 +227,15 @@ export default function CookieStatusPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      {/* 开发环境提示 */}
+      {process.env.NODE_ENV === 'development' && (
+        <Card className="border-yellow-200 bg-yellow-50">
+          <CardContent className="pt-6">
+            <p className="text-yellow-700">🔧 开发环境模式：无需管理员密钥即可访问</p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
@@ -305,6 +355,15 @@ export default function CookieStatusPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* 验证状态提示 */}
+      {validationMessage && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="pt-6">
+            <p className="text-blue-600">ℹ️ {validationMessage}</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 错误提示 */}
       {error && (

@@ -14,17 +14,32 @@ function checkAccess(request: NextRequest): boolean {
   if (process.env.NODE_ENV === 'development') {
     return true;
   }
-  
+
   // 检查管理员密钥
   const adminKey = request.headers.get('x-admin-key') || request.nextUrl.searchParams.get('key');
   const expectedKey = process.env.ADMIN_KEY;
-  
+
   if (!expectedKey) {
     console.warn('⚠️ ADMIN_KEY未配置，Cookie状态页面在生产环境中不可访问');
     return false;
   }
-  
-  return adminKey === expectedKey;
+
+  if (!adminKey) {
+    console.warn('⚠️ 未提供管理员密钥');
+    return false;
+  }
+
+  // 去除首尾空格并进行比较
+  const trimmedAdminKey = adminKey.trim();
+  const trimmedExpectedKey = expectedKey.trim();
+
+  console.log('🔐 密钥验证:', {
+    provided: trimmedAdminKey.substring(0, 5) + '***',
+    expected: trimmedExpectedKey.substring(0, 5) + '***',
+    match: trimmedAdminKey === trimmedExpectedKey
+  });
+
+  return trimmedAdminKey === trimmedExpectedKey;
 }
 
 /**
