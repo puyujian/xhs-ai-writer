@@ -40,13 +40,17 @@ export class CookieManager {
    * 从环境变量加载所有cookie
    */
   private loadCookiesFromEnv(): void {
+    console.log('🔍 开始从环境变量加载Cookie...');
     let cookieIndex = 1;
-    
+
     while (true) {
       const cookieValue = process.env[`XHS_COOKIE_${cookieIndex}`];
       if (!cookieValue) {
+        console.log(`📋 检查 XHS_COOKIE_${cookieIndex}: 未找到`);
         break; // 没有更多cookie了
       }
+
+      console.log(`✅ 找到 XHS_COOKIE_${cookieIndex}: ${cookieValue.substring(0, 10)}...`);
 
       const cookieId = `cookie_${cookieIndex}`;
       const cookieInfo: CookieInfo = {
@@ -64,6 +68,11 @@ export class CookieManager {
     }
 
     console.log(`🍪 Cookie管理器初始化完成，加载了 ${this.cookies.size} 个cookie`);
+
+    // 如果没有找到任何cookie，记录警告
+    if (this.cookies.size === 0) {
+      console.warn('⚠️ 警告：没有找到任何Cookie配置！请检查环境变量 XHS_COOKIE_1, XHS_COOKIE_2 等');
+    }
   }
 
   /**

@@ -47,14 +47,19 @@ function checkAccess(request: NextRequest): boolean {
  */
 export async function GET(request: NextRequest) {
   try {
+    console.log('🔍 Cookie状态API被调用');
+
     // 访问控制检查
     if (!checkAccess(request)) {
+      console.warn('❌ 访问控制检查失败');
       return createErrorResponse(
         '访问被拒绝',
         HTTP_STATUS.UNAUTHORIZED,
         '需要有效的管理员密钥'
       );
     }
+
+    console.log('✅ 访问控制检查通过');
 
     // 获取查询参数
     const { searchParams } = request.nextUrl;
@@ -83,9 +88,23 @@ export async function GET(request: NextRequest) {
 
       default:
         // 返回完整的cookie状态信息
-        const cookiesInfo = cookieManager.getAllCookiesInfo();
-        const cookieStats = cookieManager.getCookieStats();
+        console.log('📊 获取Cookie信息...');
+
+        let cookiesInfo, cookieStats;
+        try {
+          cookiesInfo = cookieManager.getAllCookiesInfo();
+          cookieStats = cookieManager.getCookieStats();
+        } catch (managerError) {
+          console.error('❌ Cookie管理器错误:', managerError);
+          // 如果cookie管理器出错，返回空数据
+          cookiesInfo = [];
+          cookieStats = { total: 0, valid: 0, invalid: 0, unknown: 0 };
+        }
+
         const envCookies = getCookies();
+
+        console.log('📊 Cookie统计:', cookieStats);
+        console.log('📊 环境变量Cookie数量:', envCookies.length);
 
         const responseData = {
           success: true,
@@ -113,11 +132,21 @@ export async function GET(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('Cookie状态API错误:', error);
+    console.error('❌ Cookie状态API错误:', error);
+
+    // 详细的错误信息
+    const errorMessage = error instanceof Error ? error.message : '未知错误';
+    const errorStack = error instanceof Error ? error.stack : '';
+
+    console.error('错误详情:', {
+      message: errorMessage,
+      stack: errorStack
+    });
+
     return createErrorResponse(
       'Cookie状态查询失败',
       HTTP_STATUS.INTERNAL_SERVER_ERROR,
-      error instanceof Error ? error.message : '未知错误'
+      errorMessage
     );
   }
 }

@@ -60,9 +60,28 @@ export default function CookieStatusPage() {
         url.searchParams.set('key', currentKey);
       }
 
-      const response = await fetch(url.toString());
+      console.log('🔍 正在请求Cookie状态:', url.toString());
+
+      // 添加超时控制
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超时
+
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      console.log('📡 API响应状态:', response.status);
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ API错误响应:', errorText);
+
         if (response.status === 401) {
           setIsAuthenticated(false);
           throw new Error('访问被拒绝，请检查管理员密钥');
@@ -71,10 +90,17 @@ export default function CookieStatusPage() {
       }
 
       const result = await response.json();
+      console.log('✅ 获取到数据:', result);
       setData(result);
       setIsAuthenticated(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '获取数据失败');
+      console.error('❌ 获取Cookie状态失败:', err);
+
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('请求超时，请检查网络连接或服务器状态');
+      } else {
+        setError(err instanceof Error ? err.message : '获取数据失败');
+      }
       setIsAuthenticated(false);
     } finally {
       setLoading(false);
@@ -129,13 +155,11 @@ export default function CookieStatusPage() {
     await fetchCookieStatus(adminKey.trim());
   };
 
-  // 初始加载（仅在开发环境或已认证时）
+  // 初始加载
   useEffect(() => {
-    // 在开发环境下自动加载，生产环境需要手动输入密钥
-    if (process.env.NODE_ENV === 'development') {
-      fetchCookieStatus();
-    }
-  }, [fetchCookieStatus]);
+    // 尝试加载数据，如果失败会显示登录界面
+    fetchCookieStatus();
+  }, []); // 移除依赖，避免无限循环
 
   // 自动刷新（仅在已认证时）
   useEffect(() => {
