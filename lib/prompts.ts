@@ -176,12 +176,14 @@ ${safeContent}
  * @param hotPostRules 热门笔记规律
  * @param userInfo 用户原始资料
  * @param keyword 关键词
+ * @param wordLimit 字数限制（可选，默认600字）
  * @returns 创作提示词
  */
 export const getGenerationPrompt = (
   hotPostRules: string,
   userInfo: string,
-  keyword: string
+  keyword: string,
+  wordLimit: number = 600
 ): string => {
   return `你是一位拥有百万粉丝、精通小红书增长 Playbook 的资深博主。你深刻理解小红书的"中心化分发"漏斗算法。
 
@@ -307,7 +309,7 @@ ${hotPostRules}
 - 包含至少3个生活化细节和1个幽默元素
 - 用场景和对话替代说明文字
 
-**首先分析素材的目标受众，选择匹配的称呼和语气**。开头从contentStructure.openingHooks中选择适合受众的风格；正文主体必须符合contentStructure.bodyTemplate的结构，将用户素材中的具体信息（如产品名称、使用体验、真实感受、价格、效果等）完整融入其中。如果用户素材中提到了具体的产品或体验，必须在正文中体现。**核心字数要求：**内容要丰富，力求达到600字左右，但**【绝对不能超过800字】**，这是为了严格遵守小红书1000字的平台硬性限制。（注：此处"字"指中文字符数，一个汉字=1字）结尾必须从contentStructure.endingHooks中选择一种来引导互动)
+**首先分析素材的目标受众，选择匹配的称呼和语气**。开头从contentStructure.openingHooks中选择适合受众的风格；正文主体必须符合contentStructure.bodyTemplate的结构，将用户素材中的具体信息（如产品名称、使用体验、真实感受、价格、效果等）完整融入其中。如果用户素材中提到了具体的产品或体验，必须在正文中体现。**核心字数要求：**内容要丰富，力求达到${wordLimit}字左右，但**【绝对不能超过${Math.min(wordLimit + 200, 1000)}字】**，这是为了严格遵守小红书1000字的平台硬性限制。（注：此处"字"指中文字符数，一个汉字=1字）结尾必须从contentStructure.endingHooks中选择一种来引导互动)
 
 ## 3. 关键词标签（10-15个）
 (必须结合报告中tagStrategy.tagCategories的所有分类，组合生成一个科学的标签矩阵，包含核心词、长尾词、场景词和人群词)

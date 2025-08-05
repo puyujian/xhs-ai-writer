@@ -11,7 +11,7 @@ const debugLoggingEnabled = process.env.ENABLE_DEBUG_LOGGING === 'true';
 
 export async function POST(request: Request) {
   try {
-    const { keyword, user_info, hot_post_rules } = await request.json();
+    const { keyword, user_info, hot_post_rules, word_limit = 600 } = await request.json();
 
     // 添加调试日志，验证数据传递
     if (debugLoggingEnabled) {
@@ -20,6 +20,7 @@ export async function POST(request: Request) {
       console.log('📝 user_info 长度:', user_info?.length || 0, '字符');
       console.log('📝 user_info 前100字符:', user_info?.substring(0, 100) || '空');
       console.log('📝 hot_post_rules 是否存在:', !!hot_post_rules);
+      console.log('📏 word_limit:', word_limit, '字'); // 添加字数限制日志
     }
 
     if (!user_info || !keyword) {
@@ -30,7 +31,8 @@ export async function POST(request: Request) {
     const generatePrompt = getGenerationPrompt(
       hot_post_rules ? JSON.stringify(hot_post_rules, null, 2) : '请参考小红书热门内容的一般规律',
       user_info,
-      keyword
+      keyword,
+      word_limit // 传递字数限制参数
     );
 
     // 创建流式响应

@@ -35,6 +35,7 @@ const playbookRegex = /##\s*7[.、]?\s*(小红书增长 Playbook|增长 Playbook
 export default function GeneratorClient() {
   const [keyword, setKeyword] = useState('')
   const [userInfo, setUserInfo] = useState('')
+  const [wordLimit, setWordLimit] = useState(600) // 默认600字
   const [loading, setLoading] = useState(false)
   const [loadingStage, setLoadingStage] = useState<'analyzing' | 'generating' | ''>('')
 
@@ -282,6 +283,7 @@ export default function GeneratorClient() {
           hot_post_rules: analysisResult.analysis,
           user_info: userInfo,
           keyword,
+          word_limit: wordLimit, // 传递字数限制参数
         }),
         signal: abortControllerRef.current.signal,
       })
@@ -650,6 +652,52 @@ export default function GeneratorClient() {
                 disabled={loading}
                 className="text-sm"
               />
+            </div>
+
+            {/* 字数限制控件 */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium mb-2">
+                <span>📏 字数限制</span>
+                <span className="text-xs text-gray-500 font-normal">（控制生成内容的长度）</span>
+              </label>
+              <div className="flex items-center gap-3">
+                {/* 预设字数选项 */}
+                <div className="flex gap-2">
+                  {[200, 400, 600, 800].map((limit) => (
+                    <button
+                      key={limit}
+                      type="button"
+                      onClick={() => setWordLimit(limit)}
+                      disabled={loading}
+                      className={`px-3 py-1.5 text-xs rounded-md border transition-all ${
+                        wordLimit === limit
+                          ? 'bg-pink-500 text-white border-pink-500'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-pink-300 hover:text-pink-600'
+                      } ${loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                      {limit}字
+                    </button>
+                  ))}
+                </div>
+
+                {/* 自定义字数输入 */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">自定义：</span>
+                  <Input
+                    type="number"
+                    min="100"
+                    max="1000"
+                    value={wordLimit}
+                    onChange={(e) => setWordLimit(Math.max(100, Math.min(1000, parseInt(e.target.value) || 600)))}
+                    disabled={loading}
+                    className="w-20 h-8 text-xs"
+                  />
+                  <span className="text-xs text-gray-500">字</span>
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                💡 建议：短文案200-400字，详细介绍600-800字，最多不超过1000字
+              </p>
             </div>
 
             {error && (
