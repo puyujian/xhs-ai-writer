@@ -196,7 +196,7 @@ export default function CookieStatusPage() {
                     id="adminKey"
                     value={adminKey}
                     onChange={(e) => setAdminKey(e.target.value)}
-                    onKeyPress={(e) => {
+                    onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         handleLogin();
                       }
@@ -253,7 +253,7 @@ export default function CookieStatusPage() {
             <span className="text-sm text-gray-600">自动刷新</span>
           </label>
           <button
-            onClick={fetchCookieStatus}
+            onClick={() => fetchCookieStatus()}
             disabled={loading}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
