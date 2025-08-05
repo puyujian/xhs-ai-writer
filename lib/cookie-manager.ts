@@ -210,7 +210,14 @@ export class CookieManager {
    */
   private getValidCookies(): CookieInfo[] {
     const now = new Date();
-    return Array.from(this.cookies.values()).filter(cookie => {
+    const allCookies: CookieInfo[] = [];
+
+    // 使用forEach代替for...of来兼容es5
+    this.cookies.forEach(cookie => {
+      allCookies.push(cookie);
+    });
+
+    return allCookies.filter(cookie => {
       // 如果cookie被标记为无效，检查是否已过冷却期
       if (!cookie.isValid) {
         const timeSinceLastFailure = now.getTime() - cookie.lastValidated.getTime();
@@ -231,7 +238,16 @@ export class CookieManager {
    * 根据cookie值查找cookie信息
    */
   private findCookieByValue(cookieValue: string): CookieInfo | undefined {
-    return Array.from(this.cookies.values()).find(cookie => cookie.value === cookieValue);
+    let foundCookie: CookieInfo | undefined;
+
+    // 使用forEach代替Array.from来兼容es5
+    this.cookies.forEach(cookie => {
+      if (cookie.value === cookieValue) {
+        foundCookie = cookie;
+      }
+    });
+
+    return foundCookie;
   }
 
   /**
@@ -278,15 +294,30 @@ export class CookieManager {
     lastValidated: string;
     consecutiveFailures: number;
   }> {
-    return Array.from(this.cookies.values()).map(cookie => ({
-      id: cookie.id,
-      maskedValue: this.maskCookie(cookie.value),
-      isValid: cookie.isValid,
-      lastUsed: cookie.lastUsed.toISOString(),
-      failureCount: cookie.failureCount,
-      lastValidated: cookie.lastValidated.toISOString(),
-      consecutiveFailures: cookie.consecutiveFailures
-    }));
+    const cookiesInfo: Array<{
+      id: string;
+      maskedValue: string;
+      isValid: boolean;
+      lastUsed: string;
+      failureCount: number;
+      lastValidated: string;
+      consecutiveFailures: number;
+    }> = [];
+
+    // 使用forEach代替Array.from来兼容es5
+    this.cookies.forEach(cookie => {
+      cookiesInfo.push({
+        id: cookie.id,
+        maskedValue: this.maskCookie(cookie.value),
+        isValid: cookie.isValid,
+        lastUsed: cookie.lastUsed.toISOString(),
+        failureCount: cookie.failureCount,
+        lastValidated: cookie.lastValidated.toISOString(),
+        consecutiveFailures: cookie.consecutiveFailures
+      });
+    });
+
+    return cookiesInfo;
   }
 
   /**
@@ -294,13 +325,21 @@ export class CookieManager {
    */
   public async validateAllCookies(): Promise<void> {
     console.log('🔍 开始验证所有cookie...');
-    
-    for (const cookie of this.cookies.values()) {
-      await this.validateCookie(cookie.value);
-      // 添加延迟避免请求过于频繁
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-    
+
+    // 使用forEach代替for...of来兼容es5
+    const cookiePromises: Promise<void>[] = [];
+    this.cookies.forEach(cookie => {
+      cookiePromises.push(
+        this.validateCookie(cookie.value).then(() => {
+          // 添加延迟避免请求过于频繁
+          return new Promise<void>(resolve => setTimeout(resolve, 1000));
+        })
+      );
+    });
+
+    // 等待所有验证完成
+    await Promise.all(cookiePromises);
+
     console.log('✅ 所有cookie验证完成');
   }
 }
