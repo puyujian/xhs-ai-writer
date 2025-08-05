@@ -90,7 +90,22 @@ export async function GET(request: NextRequest) {
         // 返回完整的cookie状态信息
         console.log('📊 获取Cookie信息...');
 
-        let cookiesInfo, cookieStats;
+        let cookiesInfo: Array<{
+          id: string;
+          maskedValue: string;
+          isValid: boolean;
+          lastUsed: string;
+          failureCount: number;
+          lastValidated: string;
+          consecutiveFailures: number;
+        }>;
+        let cookieStats: {
+          total: number;
+          valid: number;
+          invalid: number;
+          unknown: number;
+        };
+
         try {
           cookiesInfo = cookieManager.getAllCookiesInfo();
           cookieStats = cookieManager.getCookieStats();
