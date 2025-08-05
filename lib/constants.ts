@@ -14,6 +14,9 @@ export const ERROR_MESSAGES = {
   MISSING_KEYWORD: '请填写关键词和原始资料',
   MISSING_REQUIRED_PARAMS: '缺少必需参数',
   XHS_COOKIE_NOT_CONFIGURED: 'XHS_COOKIE is not configured in environment variables.',
+  XHS_NO_VALID_COOKIES: '没有可用的有效cookie，请检查配置',
+  XHS_ALL_COOKIES_INVALID: '所有cookie都已失效，请更新cookie配置',
+  XHS_COOKIE_VALIDATION_FAILED: 'Cookie验证失败',
   XHS_API_ERROR: '小红书API返回错误状态',
   XHS_DATA_STRUCTURE_ERROR: '小红书API返回的数据结构异常',
   NO_NOTES_FOUND: '未找到相关笔记内容',
@@ -39,6 +42,15 @@ export const CONFIG = {
   TARGET_NOTES_COUNT: 40,
   MAX_PAGES: 3,
   TRACE_ID_LENGTH: 16,
+} as const;
+
+// Cookie管理相关常量
+export const COOKIE_CONFIG = {
+  MAX_FAILURES: 3,              // 最大失败次数
+  VALIDATION_INTERVAL: 300000,  // 5分钟验证间隔
+  COOLDOWN_PERIOD: 600000,      // 10分钟冷却期
+  REQUEST_TIMEOUT: 10000,       // 10秒请求超时
+  VALIDATION_DELAY: 1000,       // 验证间隔延迟（避免请求过频）
 } as const;
 
 // HTTP状态码

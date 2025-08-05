@@ -1,9 +1,10 @@
 import { XhsNoteItem, XhsApiResponse, ProcessedNote } from '@/lib/types';
 import { getAnalysisPrompt } from '@/lib/prompts';
 import { ERROR_MESSAGES, CONFIG, API_ENDPOINTS, XHS_CONFIG, HTTP_STATUS } from '@/lib/constants';
-import { generateTraceId, createApiResponse, createErrorResponse, getEnvVar } from '@/lib/utils';
+import { generateTraceId, createApiResponse, createErrorResponse, getCookies } from '@/lib/utils';
 import { getCacheData, saveCacheData, getFallbackCacheData } from '@/lib/cache-manager';
 import { aiManager } from '@/lib/ai-manager';
+import { cookieManager } from '@/lib/cookie-manager';
 
 // 调试日志控制
 const debugLoggingEnabled = process.env.ENABLE_DEBUG_LOGGING === 'true';
@@ -52,9 +53,16 @@ async function fetchHotPostsWithCache(keyword: string): Promise<string> {
 
 // 实际的爬取函数
 async function scrapeHotPosts(keyword: string): Promise<string> {
-  const cookie = getEnvVar('XHS_COOKIE');
+  // 获取可用的cookie
+  const cookie = await cookieManager.getNextValidCookie();
   if (!cookie) {
-    throw new Error(ERROR_MESSAGES.XHS_COOKIE_NOT_CONFIGURED);
+    // 检查是否有配置的cookie
+    const allCookies = getCookies();
+    if (allCookies.length === 0) {
+      throw new Error(ERROR_MESSAGES.XHS_COOKIE_NOT_CONFIGURED);
+    } else {
+      throw new Error(ERROR_MESSAGES.XHS_NO_VALID_COOKIES);
+    }
   }
 
   try {
@@ -111,6 +119,12 @@ async function scrapeHotPosts(keyword: string): Promise<string> {
 
         clearTimeout(timeoutId);
 
+        // 检查认证相关的错误状态码
+        if (response.status === 401 || response.status === 403) {
+          cookieManager.markCookieAsInvalid(cookie, `HTTP ${response.status}: 认证失败`);
+          throw new Error(`认证失败: HTTP ${response.status}`);
+        }
+
         // 检查响应状态（允许4xx和5xx状态码通过，与axios的validateStatus行为一致）
         if (response.status >= 500) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -118,6 +132,22 @@ async function scrapeHotPosts(keyword: string): Promise<string> {
 
         // 解析JSON响应
         const data = await response.json();
+
+        // 检查API响应是否表示认证问题
+        if (data.success === false && (
+          data.msg?.includes('登录') ||
+          data.msg?.includes('认证') ||
+          data.msg?.includes('权限') ||
+          data.msg?.includes('token')
+        )) {
+          cookieManager.markCookieAsInvalid(cookie, `API认证失败: ${data.msg}`);
+          throw new Error(`认证失败: ${data.msg}`);
+        }
+
+        // 如果请求成功，标记cookie为有效
+        if (response.status === 200 && data.success !== false) {
+          cookieManager.markCookieAsValid(cookie);
+        }
 
         // 返回与axios兼容的响应格式
         return {
@@ -127,8 +157,19 @@ async function scrapeHotPosts(keyword: string): Promise<string> {
       } catch (error) {
         clearTimeout(timeoutId);
         if (error instanceof Error && error.name === 'AbortError') {
+          cookieManager.markCookieAsInvalid(cookie, '请求超时');
           throw new Error('请求超时');
         }
+
+        // 如果是网络错误，不立即标记cookie为无效
+        if (error instanceof Error && (
+          error.message.includes('fetch') ||
+          error.message.includes('network') ||
+          error.message.includes('ECONNRESET')
+        )) {
+          console.warn(`⚠️ 网络错误，不标记cookie为无效: ${error.message}`);
+        }
+
         throw error;
       }
     };
@@ -164,6 +205,7 @@ async function scrapeHotPosts(keyword: string): Promise<string> {
 
       // 检查响应状态
       if (response.status !== HTTP_STATUS.OK) {
+        // 如果是认证相关错误，cookie已经在fetchNotesPage中被标记为无效
         throw new Error(`${ERROR_MESSAGES.XHS_API_ERROR}: ${response.status}`);
       }
 
@@ -179,6 +221,7 @@ async function scrapeHotPosts(keyword: string): Promise<string> {
 
       // 检查API响应结构
       if (!data.success) {
+        // 如果是认证相关错误，cookie已经在fetchNotesPage中被标记为无效
         throw new Error(`小红书API错误: ${data.msg || '未知错误'}`);
       }
 

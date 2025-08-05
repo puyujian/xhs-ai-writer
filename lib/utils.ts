@@ -34,6 +34,52 @@ export function getEnvVar(envVar: string, defaultValue: string = ''): string {
 }
 
 /**
+ * 获取所有编号的cookie环境变量
+ * @returns cookie数组
+ */
+export function getCookies(): string[] {
+  const cookies: string[] = [];
+  let cookieIndex = 1;
+
+  while (true) {
+    const cookieValue = process.env[`XHS_COOKIE_${cookieIndex}`];
+    if (!cookieValue) {
+      break; // 没有更多cookie了
+    }
+    cookies.push(cookieValue);
+    cookieIndex++;
+  }
+
+  // 如果没有找到编号的cookie，尝试读取原来的单个cookie
+  if (cookies.length === 0) {
+    const singleCookie = process.env['XHS_COOKIE'];
+    if (singleCookie) {
+      cookies.push(singleCookie);
+      console.warn('⚠️ 检测到旧版单cookie配置，建议迁移到XHS_COOKIE_1格式');
+    }
+  }
+
+  return cookies;
+}
+
+/**
+ * 验证cookie格式是否正确
+ * @param cookie cookie字符串
+ * @returns 是否有效
+ */
+export function isValidCookieFormat(cookie: string): boolean {
+  if (!cookie || typeof cookie !== 'string') {
+    return false;
+  }
+
+  // 基本格式检查：应该包含键值对
+  const hasKeyValuePairs = cookie.includes('=');
+  const hasMinLength = cookie.length > 10;
+
+  return hasKeyValuePairs && hasMinLength;
+}
+
+/**
  * 创建API成功响应
  * @param data 响应数据
  * @param status HTTP状态码
