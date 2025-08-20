@@ -22,7 +22,8 @@ export async function GET(request: NextRequest) {
     }
 
     // 复用现有API路由（通过内部HTTP调用）
-    const base = process.env.PRODUCTION_URL || 'http://localhost:3000';
+    // {{ AURA-X: Modify - 使用请求origin避免localhost自调用失败. Confirmed via 寸止 }}
+    const base = process.env.PRODUCTION_URL || request.nextUrl.origin;
     const detailRes = await fetch(`${base}/api/xhs/detail?noteId=${noteId}`);
     if (!detailRes.ok) {
       const t = await detailRes.text();
