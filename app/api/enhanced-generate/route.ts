@@ -142,39 +142,51 @@ export async function POST(request: NextRequest) {
 
           // 阶段6：增强版文案生成
           controller.enqueue(encoder.encode(`data: {"stage": "generation", "message": "正在生成增强版文案..."}\n\n`));
-          
-          // 构建综合洞察
+
+          // 构建综合洞察（提供完整的非空结构以满足类型要求）
           const comprehensiveInsights = {
-            performanceSummary: competitorInsights ? {
-              overallRating: 'good',
-              keySuccessFactors: competitorInsights.competitorStrengths.slice(0, 3),
-              improvementAreas: competitorInsights.marketGaps.slice(0, 2),
-              benchmarkComparison: `平均质量评分: ${competitorInsights.benchmarkData.avgScore.toFixed(1)}/10`
-            } : null,
-            audienceInsights: personalizedInsights ? {
+            performanceSummary: {
+              overallRating: competitorInsights ? 'good' : 'average',
+              keySuccessFactors: competitorInsights ? competitorInsights.competitorStrengths.slice(0, 3) : [],
+              improvementAreas: competitorInsights ? competitorInsights.marketGaps.slice(0, 2) : [],
+              benchmarkComparison: competitorInsights
+                ? `平均质量评分: ${competitorInsights.benchmarkData.avgScore.toFixed(1)}/10`
+                : '暂无对比数据'
+            },
+            audienceInsights: {
               primaryAudience: user_profile?.targetAudience || '目标用户',
-              audienceNeeds: personalizedInsights.contentSuggestions.slice(0, 3).map((s: any) => s.targetAudience),
-              contentPreferences: personalizedInsights.optimizationTips.slice(0, 3).map((t: any) => t.suggestion),
+              audienceNeeds: personalizedInsights
+                ? personalizedInsights.contentSuggestions.slice(0, 3).map((s: any) => s.targetAudience)
+                : [],
+              contentPreferences: personalizedInsights
+                ? personalizedInsights.optimizationTips.slice(0, 3).map((t: any) => t.suggestion)
+                : [],
               engagementPatterns: ['高质量互动', '深度讨论', '实用性关注']
-            } : null,
-            optimizationSuggestions: personalizedInsights ? {
-              titleOptimization: personalizedInsights.optimizationTips
-                .filter((t: any) => t.area === 'title')
-                .map((t: any) => t.suggestion),
-              contentOptimization: personalizedInsights.optimizationTips
-                .filter((t: any) => t.area === 'content')
-                .map((t: any) => t.suggestion),
-              engagementOptimization: personalizedInsights.optimizationTips
-                .filter((t: any) => t.area === 'engagement')
-                .map((t: any) => t.suggestion),
+            },
+            optimizationSuggestions: {
+              titleOptimization: personalizedInsights
+                ? personalizedInsights.optimizationTips
+                    .filter((t: any) => t.area === 'title')
+                    .map((t: any) => t.suggestion)
+                : [],
+              contentOptimization: personalizedInsights
+                ? personalizedInsights.optimizationTips
+                    .filter((t: any) => t.area === 'content')
+                    .map((t: any) => t.suggestion)
+                : [],
+              engagementOptimization: personalizedInsights
+                ? personalizedInsights.optimizationTips
+                    .filter((t: any) => t.area === 'engagement')
+                    .map((t: any) => t.suggestion)
+                : [],
               timingOptimization: '建议在用户活跃时段发布'
-            } : null,
-            creativeInspiration: trendInsights ? {
-              similarTopics: trendInsights.emergingTopics.slice(0, 3),
-              trendingElements: trendInsights.contentFormatTrends.slice(0, 3),
-              contentAngles: trendInsights.recommendedContentTypes.slice(0, 3),
+            },
+            creativeInspiration: {
+              similarTopics: trendInsights ? trendInsights.emergingTopics.slice(0, 3) : [],
+              trendingElements: trendInsights ? trendInsights.contentFormatTrends.slice(0, 3) : [],
+              contentAngles: trendInsights ? trendInsights.recommendedContentTypes.slice(0, 3) : [],
               formatSuggestions: ['图文结合', '视频展示', '互动问答']
-            } : null
+            }
           };
 
           // 使用增强版生成提示词
