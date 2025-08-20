@@ -325,7 +325,7 @@ async function scrapeHotPosts(keyword: string): Promise<string> {
 
 export async function POST(request: Request) {
   try {
-    const { keyword } = await request.json();
+    const { keyword, deepAnalysis } = await request.json();
 
     if (!keyword) {
       return createErrorResponse('Keyword is required', HTTP_STATUS.BAD_REQUEST);
@@ -359,9 +359,93 @@ export async function POST(request: Request) {
       ['titleFormulas', 'contentStructure', 'tagStrategy', 'coverStyleAnalysis']
     );
 
+    // 深度分析逻辑：当 deepAnalysis=true 时，按点赞Top5做逐条正文+评论分析
+    if (deepAnalysis === true) {
+      try {
+        // 解析出已缓存的结构化posts数据来源（saveCacheData有processedNotes）
+        const cached = await getCacheData(keyword);
+        // 若无缓存或缓存没有结构化posts，则触发爬取以生成processedNotes
+        let posts: ProcessedNote[] = cached?.processedNotes || [];
+        if (posts.length === 0) {
+          // 触发一次抓取，生成缓存（字符串result + processedNotes）
+          await fetchHotPostsWithCache(keyword);
+        }
+        const refreshed = await getCacheData(keyword);
+        posts = refreshed?.processedNotes || posts;
+
+        if (posts.length === 0) {
+          return createErrorResponse('深度分析失败：未获取到热门笔记列表', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+        }
+
+        // 选取点赞Top5
+        const top5 = posts
+          .slice()
+          .sort((a, b) => (b.interact_info.liked_count || 0) - (a.interact_info.liked_count || 0))
+          .slice(0, 5);
+
+        // 调用内部路由，获取每篇的详情与评论并做分析
+        const base = process.env.PRODUCTION_URL || (globalThis as any).ORIGIN || 'http://localhost:3000';
+        const top5Analysis: any[] = [];
+
+        for (const p of top5) {
+          const noteId = p.note_id;
+          if (!noteId || !/^[a-f0-9]{24}$/i.test(noteId)) {
+            top5Analysis.push({ noteId, error: '无效的noteId或缺失' });
+            continue;
+          }
+
+          // 获取详情
+          const detailRes = await fetch(`${base}/api/xhs/detail?noteId=${noteId}`);
+          if (!detailRes.ok) {
+            top5Analysis.push({ noteId, error: `获取详情失败: ${detailRes.status}` });
+            continue;
+          }
+          const detailJson = await detailRes.json();
+
+          // 获取评论（可根据需要增大pageSize/翻页）
+          const commentsRes = await fetch(`${base}/api/xhs/comments?noteId=${noteId}&pageSize=50&pageIndex=0`);
+          if (!commentsRes.ok) {
+            top5Analysis.push({ noteId, error: `获取评论失败: ${commentsRes.status}` });
+            continue;
+          }
+          const commentsJson = await commentsRes.json();
+
+          // 适配到分析模块输入
+          const noteDetail = detailJson.data; // XhsNoteDetail
+          const comments = (commentsJson.comments || []).map((c: any) => ({
+            id: c.id,
+            content: c.content,
+            likeCount: c.likeCount,
+            createTime: c.createTime,
+          }));
+
+          // 动态导入分析模块以避免循环依赖
+          const { analyzeNoteContent, analyzeComments, getCombinedInsights } = await import('@/lib/analysis/xhs-analysis');
+          const noteAnalysis = analyzeNoteContent(noteDetail);
+          const commentAnalysis = analyzeComments(comments);
+          const insights = getCombinedInsights(noteAnalysis, commentAnalysis);
+
+          top5Analysis.push({ noteId, title: p.title, likeCount: p.interact_info.liked_count, noteAnalysis, commentAnalysis, insights });
+
+          // 节流，避免请求过快
+          await new Promise(r => setTimeout(r, 300));
+        }
+
+        return createApiResponse({
+          success: true,
+          keyword,
+          deep: true,
+          top5Analysis,
+        });
+      } catch (e) {
+        return createErrorResponse(`Top5深度分析失败: ${e instanceof Error ? e.message : '未知错误'}`, HTTP_STATUS.INTERNAL_SERVER_ERROR);
+      }
+    }
+
     return createApiResponse({
       success: true,
       keyword,
+      deep: false,
       // 直接返回完整的分析结果
       analysis: analysisResult,
       summary: `基于${keyword}热门笔记的深度分析，提取了${analysisResult.titleFormulas?.suggestedFormulas?.length || 0}个标题公式、${analysisResult.contentStructure?.openingHooks?.length || 0}种开头方式、${analysisResult.coverStyleAnalysis?.commonStyles?.length || 0}种封面风格等实用策略。`,
