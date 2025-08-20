@@ -191,6 +191,64 @@ const ERROR_PATTERNS: Array<{
       canRetry: true,
       retryDelay: 30
     }
+  },
+
+  // 笔记详情相关错误
+  {
+    pattern: /笔记ID.*格式无效|invalid.*note.*id/i,
+    type: ErrorType.VALIDATION_ERROR,
+    userError: {
+      title: '笔记ID格式错误',
+      message: '请输入正确的24位小红书笔记ID',
+      suggestion: '笔记ID应为24位十六进制字符，如：689c3e96000000001d02a88e',
+      canRetry: false
+    }
+  },
+  {
+    pattern: /笔记详情.*数据结构异常|note.*detail.*structure.*error/i,
+    type: ErrorType.PARSE_ERROR,
+    userError: {
+      title: '笔记数据异常',
+      message: '笔记详情数据格式不正确',
+      suggestion: '请检查笔记是否存在，或稍后重试',
+      canRetry: true,
+      retryDelay: 5
+    }
+  },
+  {
+    pattern: /获取笔记详情失败|fetch.*note.*detail.*failed/i,
+    type: ErrorType.API_ERROR,
+    userError: {
+      title: '获取笔记详情失败',
+      message: '无法获取指定笔记的详细信息',
+      suggestion: '请检查笔记ID是否正确，或稍后重试',
+      canRetry: true,
+      retryDelay: 10
+    }
+  },
+
+  // 评论相关错误
+  {
+    pattern: /评论.*数据结构异常|comment.*structure.*error/i,
+    type: ErrorType.PARSE_ERROR,
+    userError: {
+      title: '评论数据异常',
+      message: '评论数据格式不正确',
+      suggestion: '请稍后重试获取评论',
+      canRetry: true,
+      retryDelay: 5
+    }
+  },
+  {
+    pattern: /获取评论失败|fetch.*comment.*failed/i,
+    type: ErrorType.API_ERROR,
+    userError: {
+      title: '获取评论失败',
+      message: '无法获取笔记的评论信息',
+      suggestion: '请检查笔记ID是否正确，或稍后重试',
+      canRetry: true,
+      retryDelay: 10
+    }
   }
 ];
 

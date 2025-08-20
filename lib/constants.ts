@@ -5,6 +5,9 @@
 // API相关常量
 export const API_ENDPOINTS = {
   XHS_SEARCH: 'https://edith.xiaohongshu.com/api/sns/web/v1/search/notes',
+  XHS_NOTE_DETAIL: 'https://pgy.xiaohongshu.com/api/solar/note/{noteId}/detail?bizCode',
+  XHS_COMMENTS: 'https://pgy.xiaohongshu.com/api/solar/note/{noteId}/comments',
+  XHS_SUB_COMMENTS: 'https://edith.xiaohongshu.com/api/sns/web/v2/comment/sub/page',
   ANALYZE_HOT_POSTS: '/api/analyze-hot-posts',
   GENERATE_STREAM: '/api/generate-stream',
 } as const;
