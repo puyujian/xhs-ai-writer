@@ -24,14 +24,19 @@ export async function GET(request: NextRequest) {
     // 复用现有API路由（通过内部HTTP调用）
     // {{ AURA-X: Modify - 使用请求origin避免localhost自调用失败. Confirmed via 寸止 }}
     const base = process.env.PRODUCTION_URL || request.nextUrl.origin;
-    const detailRes = await fetch(`${base}/api/xhs/detail?noteId=${noteId}`);
+
+    // {{ AURA-X: Add - 处理Vercel Deployment Protection绕过. Confirmed via 寸止 }}
+    const bypassToken = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    const bypassParams = bypassToken ? `&x-vercel-set-bypass-cookie=true&x-vercel-protection-bypass=${bypassToken}` : '';
+
+    const detailRes = await fetch(`${base}/api/xhs/detail?noteId=${noteId}${bypassParams}`);
     if (!detailRes.ok) {
       const t = await detailRes.text();
       return createErrorResponse(`获取笔记详情失败: ${t}`, detailRes.status);
     }
     const detailJson = await detailRes.json();
 
-    const commentsRes = await fetch(`${base}/api/xhs/comments?noteId=${noteId}&pageSize=${pageSize}&pageIndex=${pageIndex}`);
+    const commentsRes = await fetch(`${base}/api/xhs/comments?noteId=${noteId}&pageSize=${pageSize}&pageIndex=${pageIndex}${bypassParams}`);
     if (!commentsRes.ok) {
       const t = await commentsRes.text();
       return createErrorResponse(`获取评论失败: ${t}`, commentsRes.status);
