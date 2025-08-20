@@ -22,29 +22,29 @@ const debugLoggingEnabled = process.env.ENABLE_DEBUG_LOGGING === 'true';
  */
 const ENHANCED_CACHE_CONFIG = {
   ...BASE_CACHE_CONFIG,
-  
+
   // 多层缓存配置
   MEMORY_CACHE_SIZE: 100, // 内存缓存最大条目数
   MEMORY_CACHE_TTL: 30 * 60 * 1000, // 内存缓存30分钟TTL
-  
+
   // 预加载配置
   PRELOAD_ENABLED: process.env.ENABLE_CACHE_PRELOAD !== 'false',
   PRELOAD_POPULAR_KEYWORDS: ['穿搭', '美妆', '护肤', '减肥', '学习', '工作', '旅行', '美食'],
   PRELOAD_BATCH_SIZE: 5,
-  
+
   // 压缩配置
   COMPRESSION_ENABLED: process.env.ENABLE_CACHE_COMPRESSION !== 'false',
   COMPRESSION_THRESHOLD: 10 * 1024, // 10KB以上启用压缩
-  
+
   // 批量处理配置
   BATCH_WRITE_SIZE: 10,
   BATCH_WRITE_INTERVAL: 5000, // 5秒批量写入间隔
-  
+
   // 性能优化配置
   ASYNC_CLEANUP: true,
   LAZY_LOADING: true,
   CACHE_WARMING: true,
-};
+} as const;
 
 /**
  * 内存缓存项接口

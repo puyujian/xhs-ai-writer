@@ -7,7 +7,101 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { XhsNoteDetail } from './types';
-import { NoteContentAnalysis, CommentSentimentAnalysis, ComprehensiveInsights } from './data-analyzer';
+
+// 避免循环依赖，直接定义类型
+export interface NoteContentAnalysis {
+  basicInfo: {
+    noteId: string;
+    title: string;
+    contentLength: number;
+    imageCount: number;
+    hasVideo: boolean;
+    createTime: string;
+    category: string;
+  };
+  contentQuality: {
+    titleScore: number;
+    contentScore: number;
+    structureScore: number;
+    overallScore: number;
+    strengths: string[];
+    improvements: string[];
+  };
+  engagement: {
+    likeRate: number;
+    commentRate: number;
+    shareRate: number;
+    favoriteRate: number;
+    engagementScore: number;
+    viralPotential: 'low' | 'medium' | 'high';
+  };
+  keywords: {
+    primaryKeywords: string[];
+    secondaryKeywords: string[];
+    hashtags: string[];
+    mentions: string[];
+  };
+  features: {
+    contentType: 'tutorial' | 'review' | 'lifestyle' | 'shopping' | 'other';
+    tone: 'professional' | 'casual' | 'humorous' | 'emotional';
+    targetAudience: string;
+    callToAction: string[];
+  };
+}
+
+export interface CommentSentimentAnalysis {
+  sentimentDistribution: {
+    positive: number;
+    neutral: number;
+    negative: number;
+    totalComments: number;
+  };
+  hotTopics: Array<{
+    topic: string;
+    frequency: number;
+    sentiment: 'positive' | 'neutral' | 'negative';
+    keywords: string[];
+  }>;
+  userFeedback: {
+    commonPraises: string[];
+    commonComplaints: string[];
+    suggestions: string[];
+    questions: string[];
+  };
+  interactionQuality: {
+    averageCommentLength: number;
+    meaningfulComments: number;
+    spamComments: number;
+    qualityScore: number;
+  };
+}
+
+export interface ComprehensiveInsights {
+  performanceSummary: {
+    overallRating: 'excellent' | 'good' | 'average' | 'poor';
+    keySuccessFactors: string[];
+    improvementAreas: string[];
+    benchmarkComparison: string;
+  };
+  audienceInsights: {
+    primaryAudience: string;
+    audienceNeeds: string[];
+    contentPreferences: string[];
+    engagementPatterns: string[];
+  };
+  optimizationSuggestions: {
+    titleOptimization: string[];
+    contentOptimization: string[];
+    engagementOptimization: string[];
+    timingOptimization: string;
+  };
+  creativeInspiration: {
+    similarTopics: string[];
+    trendingElements: string[];
+    contentAngles: string[];
+    formatSuggestions: string[];
+  };
+}
 
 // 调试日志控制
 const debugLoggingEnabled = process.env.ENABLE_DEBUG_LOGGING === 'true';

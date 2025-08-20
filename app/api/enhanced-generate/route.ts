@@ -128,12 +128,12 @@ export async function POST(request: NextRequest) {
           let personalizedInsights = null;
           if (personalized_recommendations && user_profile) {
             controller.enqueue(encoder.encode(`data: {"stage": "personalization", "message": "正在生成个性化建议..."}\n\n`));
-            
+
             try {
               personalizedInsights = await businessIntelligence.generatePersonalizedRecommendations(
                 user_profile,
-                competitorInsights,
-                trendInsights
+                competitorInsights || undefined,
+                trendInsights || undefined
               );
             } catch (error) {
               console.warn('个性化推荐失败:', error);
@@ -205,7 +205,7 @@ export async function POST(request: NextRequest) {
           
           try {
             // 解析生成的内容
-            const parsedContent = this.parseGeneratedContent(generatedContent);
+            const parsedContent = parseGeneratedContent(generatedContent);
             
             // 保存到历史记录
             const historyItem = {

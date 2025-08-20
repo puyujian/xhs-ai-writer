@@ -5,8 +5,8 @@
 
 import { EventEmitter } from 'events';
 import { XhsNoteDetail } from './types';
-import { dataAnalyzer, NoteContentAnalysis, CommentSentimentAnalysis } from './data-analyzer';
-import { dataStorage } from './data-storage';
+import { dataAnalyzer } from './data-analyzer';
+import { dataStorage, NoteContentAnalysis, CommentSentimentAnalysis } from './data-storage';
 import { enhancedCacheManager } from './enhanced-cache-manager';
 
 // 调试日志控制

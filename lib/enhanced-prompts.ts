@@ -3,7 +3,7 @@
  * 集成笔记详情和评论数据，提升文案生成的针对性和用户共鸣度
  */
 
-import { NoteContentAnalysis, CommentSentimentAnalysis, ComprehensiveInsights } from './data-analyzer';
+import { NoteContentAnalysis, CommentSentimentAnalysis, ComprehensiveInsights } from './data-storage';
 
 /**
  * 增强版分析提示词 - 基于真实笔记详情数据
