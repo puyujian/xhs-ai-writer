@@ -3,7 +3,7 @@ import { XhsCommentsResponse } from '@/lib/types';
 import { ERROR_MESSAGES, API_ENDPOINTS, XHS_CONFIG, HTTP_STATUS } from '@/lib/constants';
 import { createApiResponse, createErrorResponse, generateTraceId } from '@/lib/utils';
 import { getCacheData, saveCacheData } from '@/lib/cache-manager';
-import { cookieManager } from '@/lib/cookie-manager';
+import { detailCookieManager } from '@/lib/cookie-manager';
 
 // 调试日志控制
 const debugLoggingEnabled = process.env.ENABLE_DEBUG_LOGGING === 'true';
@@ -20,8 +20,8 @@ async function fetchComments(
   pageSize: number = 20,
   pageIndex: number = 0
 ): Promise<XhsCommentsResponse> {
-  // 获取可用的cookie
-  const cookie = await cookieManager.getNextValidCookie();
+  // 获取可用的cookie（详情/评论独立池；未配置则在管理器内部回退）
+  const cookie = await detailCookieManager.getNextValidCookie();
   if (!cookie) {
     throw new Error(ERROR_MESSAGES.XHS_NO_VALID_COOKIES);
   }
@@ -75,7 +75,7 @@ async function fetchComments(
       // 检查HTTP状态码
       if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
         // 标记cookie为无效
-        cookieManager.markCookieAsInvalid(cookie);
+        detailCookieManager.markCookieAsInvalid(cookie);
         throw new Error(`认证失败: ${response.status}`);
       }
 
@@ -95,7 +95,7 @@ async function fetchComments(
       if (!data.success) {
         // 如果是认证相关错误，标记cookie为无效
         if (data.msg?.includes('登录') || data.msg?.includes('权限')) {
-          cookieManager.markCookieAsInvalid(cookie);
+          detailCookieManager.markCookieAsInvalid(cookie);
         }
         throw new Error(`小红书API错误: ${data.msg || '未知错误'}`);
       }
@@ -105,7 +105,7 @@ async function fetchComments(
       }
 
       // 标记cookie为有效
-      cookieManager.markCookieAsValid(cookie);
+      detailCookieManager.markCookieAsValid(cookie);
 
       return data;
 

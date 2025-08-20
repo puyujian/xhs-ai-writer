@@ -31,47 +31,86 @@ export class CookieManager {
   private maxFailures: number = 3;           // 最大失败次数
   private validationInterval: number = 300000; // 5分钟验证间隔
   private cooldownPeriod: number = 600000;   // 10分钟冷却期
+  private envPrefix: string;                 // 环境变量前缀，如 XHS_COOKIE / XHS_DETAIL_COOKIE
+  private poolName: string;                  // 池名称，用于日志
+  private fallbackPrefix: string;            // 回退前缀，默认 XHS_COOKIE
 
-  constructor() {
+  constructor(envPrefix: string = 'XHS_COOKIE', poolName: string = 'default', fallbackPrefix: string = 'XHS_COOKIE') {
+    this.envPrefix = envPrefix;
+    this.poolName = poolName;
+    this.fallbackPrefix = fallbackPrefix;
     this.loadCookiesFromEnv();
   }
 
   /**
-   * 从环境变量加载所有cookie
+   * 从环境变量加载所有cookie（支持前缀与回退）
    */
   private loadCookiesFromEnv(): void {
-    console.log('🔍 开始从环境变量加载Cookie...');
-    let cookieIndex = 1;
+    console.log(`🔍 [${this.poolName}] 开始从环境变量加载Cookie...`);
 
-    while (true) {
-      const cookieValue = process.env[`XHS_COOKIE_${cookieIndex}`];
-      if (!cookieValue) {
-        console.log(`📋 检查 XHS_COOKIE_${cookieIndex}: 未找到`);
-        break; // 没有更多cookie了
-      }
-
-      console.log(`✅ 找到 XHS_COOKIE_${cookieIndex}: ${cookieValue.substring(0, 10)}...`);
-
-      const cookieId = `cookie_${cookieIndex}`;
-      const cookieInfo: CookieInfo = {
+    // 优先尝试非轮询的单变量：<PREFIX>（如 XHS_DETAIL_COOKIE）
+    const single = process.env[this.envPrefix];
+    if (single) {
+      const cookieId = `${this.poolName}_single`;
+      this.cookies.set(cookieId, {
         id: cookieId,
-        value: cookieValue,
-        isValid: true, // 初始假设有效
-        lastUsed: new Date(0), // 从未使用
+        value: single,
+        isValid: true,
+        lastUsed: new Date(0),
         failureCount: 0,
-        lastValidated: new Date(0), // 从未验证
+        lastValidated: new Date(0),
         consecutiveFailures: 0
-      };
+      });
+      console.log(`✅ [${this.poolName}] 发现单一Cookie变量 ${this.envPrefix}`);
+    }
 
-      this.cookies.set(cookieId, cookieInfo);
+    // 然后尝试轮询：<PREFIX>_1/2/3...
+    let cookieIndex = 1;
+    while (true) {
+      const key = `${this.envPrefix}_${cookieIndex}`;
+      const v = process.env[key];
+      if (!v) break;
+      const cookieId = `${this.poolName}_${cookieIndex}`;
+      this.cookies.set(cookieId, {
+        id: cookieId,
+        value: v,
+        isValid: true,
+        lastUsed: new Date(0),
+        failureCount: 0,
+        lastValidated: new Date(0),
+        consecutiveFailures: 0
+      });
+      console.log(`✅ [${this.poolName}] 找到 ${key}: ${v.substring(0,10)}...`);
       cookieIndex++;
     }
 
-    console.log(`🍪 Cookie管理器初始化完成，加载了 ${this.cookies.size} 个cookie`);
+    // 如果当前前缀没有任何cookie，回退到 fallbackPrefix
+    if (this.cookies.size === 0 && this.fallbackPrefix && this.fallbackPrefix !== this.envPrefix) {
+      console.log(`🔄 [${this.poolName}] 未找到${this.envPrefix}，尝试回退到 ${this.fallbackPrefix}`);
+      let idx = 1;
+      while (true) {
+        const key = `${this.fallbackPrefix}_${idx}`;
+        const v = process.env[key];
+        if (!v) break;
+        const cookieId = `${this.poolName}_fallback_${idx}`;
+        this.cookies.set(cookieId, {
+          id: cookieId,
+          value: v,
+          isValid: true,
+          lastUsed: new Date(0),
+          failureCount: 0,
+          lastValidated: new Date(0),
+          consecutiveFailures: 0
+        });
+        console.log(`✅ [${this.poolName}] 回退命中 ${key}: ${v.substring(0,10)}...`);
+        idx++;
+      }
+    }
 
-    // 如果没有找到任何cookie，记录警告
+    console.log(`🍪 [${this.poolName}] Cookie管理器初始化完成，加载了 ${this.cookies.size} 个cookie`);
+
     if (this.cookies.size === 0) {
-      console.warn('⚠️ 警告：没有找到任何Cookie配置！请检查环境变量 XHS_COOKIE_1, XHS_COOKIE_2 等');
+      console.warn(`⚠️ [${this.poolName}] 未找到任何Cookie配置！请检查环境变量 ${this.envPrefix} 或 ${this.envPrefix}_1,2...`);
     }
   }
 
@@ -80,7 +119,7 @@ export class CookieManager {
    */
   public async getNextValidCookie(): Promise<string | null> {
     const validCookies = this.getValidCookies();
-    
+
     if (validCookies.length === 0) {
       console.warn('⚠️ 没有可用的cookie');
       return null;
@@ -92,7 +131,7 @@ export class CookieManager {
 
     // 更新使用时间
     cookie.lastUsed = new Date();
-    
+
     console.log(`🍪 使用cookie: ${cookie.id} (${this.maskCookie(cookie.value)})`);
     return cookie.value;
   }
@@ -109,7 +148,7 @@ export class CookieManager {
 
     cookie.failureCount++;
     cookie.consecutiveFailures++;
-    
+
     // 如果连续失败次数超过阈值，标记为无效
     if (cookie.consecutiveFailures >= this.maxFailures) {
       cookie.isValid = false;
@@ -131,7 +170,7 @@ export class CookieManager {
     cookie.isValid = true;
     cookie.consecutiveFailures = 0; // 重置连续失败次数
     cookie.lastValidated = new Date();
-    
+
     console.log(`✅ Cookie ${cookie.id} 验证有效`);
   }
 
@@ -189,10 +228,10 @@ export class CookieManager {
 
       if (response.status === 200) {
         const data = await response.json();
-        
+
         // 检查响应内容是否表示认证失败
         if (data.success === false && (
-          data.msg?.includes('登录') || 
+          data.msg?.includes('登录') ||
           data.msg?.includes('认证') ||
           data.msg?.includes('权限')
         )) {
@@ -363,3 +402,10 @@ export class CookieManager {
 
 // 全局cookie管理器实例
 export const cookieManager = new CookieManager();
+
+
+// 为不同用途导出独立的Cookie池实例（保持向后兼容）
+// 搜索：保持原有行为，继续使用 XHS_COOKIE / XHS_COOKIE_*
+export const searchCookieManager = new CookieManager('XHS_COOKIE', 'search', 'XHS_COOKIE');
+// 详情/评论：优先 XHS_DETAIL_COOKIE（单变量或编号），回退到 XHS_COOKIE_*
+export const detailCookieManager = new CookieManager('XHS_DETAIL_COOKIE', 'detail', 'XHS_COOKIE');
