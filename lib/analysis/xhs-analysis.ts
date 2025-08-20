@@ -186,8 +186,7 @@ export function analyzeNoteContent(note: XhsNoteDetail): NoteContentAnalysis {
   const sentScore = sentences.length ? (posHits - negHits) / sentences.length : 0;
 
   // 口语化程度
-  const emojiCount = (content.match(/[\u{1F300}-\u{1FAFF}]/u) ? content.match(/[\u{1F300}-\u{1FAFF}]/gu)!.length : 0)
-    + (content.match(/[😂😊😍💪✨🔥👍👉💕🥹😅😭🐶🐱✨⭐️⭐︎⭐]/g)?.length || 0);
+  const emojiCount = (content.match(/[😂😊😍💪✨🔥👍👉💕🥹😅😭🐶🐱⭐️⭐︎⭐]/g)?.length || 0);
   const fillerWords = (content.match(/啊|呀|吧|呢|嘛|哇|欸|呗|诶/g)?.length || 0);
   const slangHits = (content.match(/绝绝子|YYDS|yyds|牛逼|牛B|OMG|omg|冲|冲冲冲|盘它|真香/g)?.length || 0);
 
@@ -205,7 +204,7 @@ export function analyzeNoteContent(note: XhsNoteDetail): NoteContentAnalysis {
     { label: '测评', test: t => /(测评|评测|上脸|上手|体验|对比|优缺点|打分|评分)/.test(t), reason: '包含测评/对比/体验等关键词' },
     { label: '种草', test: t => /(安利|种草|必须入|闭眼入|好用到|真香|推荐|回购)/.test(t), reason: '包含推荐/安利/回购等关键词' },
     { label: '避坑', test: t => /(避坑|踩雷|不要买|后悔|血泪|千万别|警告)/.test(t), reason: '包含避坑/踩雷/警告等关键词' },
-    { label: '故事', test: t => /(故事|那天|后来|第一次|有一次|朋友说|我妈说|他/她说)/.test(t) || /“.*”/.test(t), reason: '出现叙事/对话/时间线线索' },
+    { label: '故事', test: t => /(故事|那天|后来|第一次|有一次|朋友说|我妈说|他\/她说)/.test(t) || /“.*”/.test(t), reason: '出现叙事/对话/时间线线索' },
   ];
   const matched = templateRules.filter(r => r.test(content));
   const templates = {
@@ -263,8 +262,6 @@ export function analyzeNoteContent(note: XhsNoteDetail): NoteContentAnalysis {
       slangHits,
     },
     topics,
-    templates,
-    attraction,
   } as NoteContentAnalysis['bodyFeatures'];
 
   const mediaFeatures = {
@@ -288,6 +285,8 @@ export function analyzeNoteContent(note: XhsNoteDetail): NoteContentAnalysis {
     mediaFeatures,
     engagement: { like, favorite, comment, share, engagementRate },
     keywords,
+    templates,
+    attraction,
   };
 }
 

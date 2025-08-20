@@ -95,7 +95,7 @@ function buildSmartSuggestions(noteAnalysis: ReturnType<typeof analyzeNoteConten
 
   // 正文结构建议
   const structureTips: string[] = [];
-  const templates = noteAnalysis.bodyFeatures.templates?.labels || [];
+  const templates = noteAnalysis.templates?.labels || [];
   if (templates.includes('教程')) structureTips.push('按照「问题→步骤→注意事项→成果」的顺序组织，步骤使用有序列表标明');
   if (templates.includes('测评')) structureTips.push('补充「对比对象/标准/场景」与「优缺点」小结，给1句结论');
   if (templates.includes('种草')) structureTips.push('补充「适合人群/不适合人群」与「价格/渠道」信息，提升实用度');
@@ -123,7 +123,7 @@ function buildSmartSuggestions(noteAnalysis: ReturnType<typeof analyzeNoteConten
     structureTips,
     qualityTips,
     ctaTips,
-    attractionScore: noteAnalysis.bodyFeatures.attraction?.score || 0,
+    attractionScore: noteAnalysis.attraction?.score || 0,
     detectedTemplates: templates,
   };
 }
