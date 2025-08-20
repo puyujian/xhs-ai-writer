@@ -1,4 +1,5 @@
 import { getGenerationPrompt } from '@/lib/prompts';
+import { buildPromptWithInsights, InsightsPayload } from '@/lib/ai/prompt-builders';
 import { ERROR_MESSAGES, HTTP_STATUS } from '@/lib/constants';
 import { aiManager } from '@/lib/ai-manager';
 import { filterSensitiveContent, detectSensitiveWords } from '@/lib/sensitive-words';
@@ -11,7 +12,7 @@ const debugLoggingEnabled = process.env.ENABLE_DEBUG_LOGGING === 'true';
 
 export async function POST(request: Request) {
   try {
-    const { keyword, user_info, hot_post_rules, word_limit = 600 } = await request.json();
+    const { keyword, user_info, hot_post_rules, word_limit = 600, insights_payload } = await request.json();
 
     // 添加调试日志，验证数据传递
     if (debugLoggingEnabled) {
@@ -27,13 +28,22 @@ export async function POST(request: Request) {
       return new Response(ERROR_MESSAGES.MISSING_REQUIRED_PARAMS, { status: HTTP_STATUS.BAD_REQUEST });
     }
 
-    // 使用模块化的生成提示词
-    const generatePrompt = getGenerationPrompt(
-      hot_post_rules ? JSON.stringify(hot_post_rules, null, 2) : '请参考小红书热门内容的一般规律',
-      user_info,
-      keyword,
-      word_limit // 传递字数限制参数
-    );
+    // 使用模块化的生成提示词（支持注入Top5洞察以增强生成质量）
+    const baseRules = hot_post_rules ? JSON.stringify(hot_post_rules, null, 2) : '请参考小红书热门内容的一般规律';
+    const generatePrompt = insights_payload
+      ? buildPromptWithInsights(baseRules, user_info, keyword, word_limit, insights_payload as InsightsPayload)
+      : getGenerationPrompt(baseRules, user_info, keyword, word_limit);
+
+    if (debugLoggingEnabled) {
+      console.log('🧠 是否注入洞察:', !!insights_payload);
+      if (insights_payload) {
+        console.log('🧠 注入的洞察强摘:', {
+          strengths: insights_payload?.insights?.strengths?.slice(0, 3),
+          risks: insights_payload?.insights?.risks?.slice(0, 3),
+          questions: insights_payload?.commentAnalysis?.representativeQuestions?.slice(0, 3)
+        });
+      }
+    }
 
     // 创建流式响应
     const encoder = new TextEncoder();

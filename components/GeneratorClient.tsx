@@ -259,7 +259,7 @@ export default function GeneratorClient() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ keyword }),
+        body: JSON.stringify({ keyword, deepAnalysis: true }),
         signal: abortControllerRef.current.signal,
       })
 
@@ -284,6 +284,14 @@ export default function GeneratorClient() {
           user_info: userInfo,
           keyword,
           word_limit: wordLimit, // 传递字数限制参数
+          // 注入Top5的第一条洞察作为生成增强（可后续做多条聚合）
+          insights_payload: Array.isArray(analysisResult.top5Analysis) && analysisResult.top5Analysis.length > 0
+            ? {
+                noteAnalysis: analysisResult.top5Analysis[0]?.noteAnalysis,
+                commentAnalysis: analysisResult.top5Analysis[0]?.commentAnalysis,
+                insights: analysisResult.top5Analysis[0]?.insights,
+              }
+            : undefined,
         }),
         signal: abortControllerRef.current.signal,
       })
