@@ -520,7 +520,7 @@ export class EnhancedCacheManager {
    * 获取缓存文件路径
    */
   private getCacheFilePath(key: string): string {
-    return path.join(ENHANCED_CACHE_CONFIG.CACHE_DIR, `${key}.json`);
+    return path.join(BASE_CACHE_CONFIG.CACHE_DIR, `${key}.json`);
   }
 
   /**
