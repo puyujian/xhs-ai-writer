@@ -132,7 +132,7 @@ async function fetchNoteDetailWithCache(noteId: string): Promise<XhsNoteDetailRe
 
   // 1. 尝试读取缓存（6小时有效期）
   if (cacheEnabled) {
-    const cachedData = await getCacheData(cacheKey, 6 * 60 * 60 * 1000); // 6小时缓存
+    const cachedData = await getCacheData(cacheKey); // 使用默认6小时缓存
     if (cachedData) {
       if (debugLoggingEnabled) {
         console.log(`✅ 使用缓存数据: ${noteId}`);
@@ -148,7 +148,7 @@ async function fetchNoteDetailWithCache(noteId: string): Promise<XhsNoteDetailRe
     // 3. 保存到缓存
     if (cacheEnabled) {
       try {
-        await saveCacheData(cacheKey, JSON.stringify(noteDetail), [], 'note_detail');
+        await saveCacheData(cacheKey, JSON.stringify(noteDetail), [], 'scraped');
         if (debugLoggingEnabled) {
           console.log(`💾 笔记详情已缓存: ${noteId}`);
         }
@@ -205,7 +205,7 @@ export async function GET(request: NextRequest) {
     const errorMessage = error instanceof Error ? error.message : '未知错误';
     
     // 根据错误类型返回不同的HTTP状态码
-    let statusCode = HTTP_STATUS.INTERNAL_SERVER_ERROR;
+    let statusCode: number = HTTP_STATUS.INTERNAL_SERVER_ERROR;
     if (errorMessage.includes('认证失败') || errorMessage.includes('权限')) {
       statusCode = HTTP_STATUS.UNAUTHORIZED;
     } else if (errorMessage.includes('笔记ID')) {
