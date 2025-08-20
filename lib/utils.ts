@@ -174,35 +174,96 @@ export function safeJsonParse<T>(jsonString: string, defaultValue: T): T {
     console.warn('JSON解析失败，尝试修复:', error);
 
     try {
-      // 尝试修复常见的JSON格式问题
-      let fixedJson = jsonString;
+      // 统一预处理：去除Markdown围栏、提取首个JSON片段、修复细节
+      let fixedJson = (jsonString || '').trim();
 
-      // 1. 移除可能的markdown代码块标记
-      fixedJson = fixedJson.replace(/```json\s*/g, '').replace(/```\s*$/g, '');
+      // 1) 去除常见的Markdown代码块围栏（```json / ``` / ~~~json / ~~~）
+      const stripMarkdownFences = (s: string): string => {
+        let out = s.trim();
+        // 三反引号围栏（带语言）起始行
+        out = out.replace(/^\s*```[a-z0-9_-]*\s*\r?\n/i, '');
+        // 三反引号围栏结束行
+        out = out.replace(/\r?\n```[\s]*$/i, '');
+        // 三波浪线围栏
+        out = out.replace(/^\s*~~~[a-z0-9_-]*\s*\r?\n/i, '');
+        out = out.replace(/\r?\n~~~[\s]*$/i, '');
+        // 兼容单行围栏包裹
+        out = out.replace(/^```[a-z0-9_-]*\s*/i, '').replace(/\s*```$/i, '');
+        out = out.replace(/^~~~[a-z0-9_-]*\s*/i, '').replace(/\s*~~~$/i, '');
+        // 特定 "```json" 形式（历史兼容）
+        out = out.replace(/```json\s*/gi, '').replace(/```\s*$/gi, '');
+        return out.trim();
+      };
 
-      // 2. 修复未闭合的字符串（简单情况）
-      const openQuotes = (fixedJson.match(/"/g) || []).length;
-      if (openQuotes % 2 !== 0) {
-        // 如果引号数量是奇数，在末尾添加引号和闭合括号
-        fixedJson = fixedJson + '"}';
-      }
+      fixedJson = stripMarkdownFences(fixedJson);
 
-      // 3. 确保JSON对象正确闭合
-      const openBraces = (fixedJson.match(/{/g) || []).length;
-      const closeBraces = (fixedJson.match(/}/g) || []).length;
-      if (openBraces > closeBraces) {
-        fixedJson = fixedJson + '}';
-      }
+      // 2) 若仍包含非JSON前缀或后缀，尝试提取首个顶层JSON对象/数组片段
+      const extractFirstJson = (s: string): string | null => {
+        const n = s.length;
+        let start = -1;
+        for (let i = 0; i < n; i++) {
+          const ch = s[i];
+          if (ch === '{' || ch === '[') { start = i; break; }
+        }
+        if (start === -1) return null;
 
-      // 4. 移除末尾的逗号
-      fixedJson = fixedJson.replace(/,(\s*[}\]])/g, '$1');
+        let inString = false;
+        let escape = false;
+        let objDepth = 0;
+        let arrDepth = 0;
 
+        const first = s[start];
+        if (first === '{') objDepth = 1; else arrDepth = 1;
+
+        for (let i = start + 1; i < n; i++) {
+          const ch = s[i];
+          if (inString) {
+            if (escape) {
+              escape = false; // 跳过转义字符
+            } else if (ch === '\\') {
+              escape = true;
+            } else if (ch === '"') {
+              inString = false;
+            }
+            continue;
+          } else {
+            if (ch === '"') { inString = true; continue; }
+            if (ch === '{') objDepth++;
+            else if (ch === '}') objDepth = Math.max(0, objDepth - 1);
+            else if (ch === '[') arrDepth++;
+            else if (ch === ']') arrDepth = Math.max(0, arrDepth - 1);
+
+            if (objDepth === 0 && arrDepth === 0) {
+              return s.slice(start, i + 1);
+            }
+          }
+        }
+        // 若未能完全闭合，返回到字符串末尾的片段，后续再做闭合修复
+        return s.slice(start);
+      };
+
+      let candidate = extractFirstJson(fixedJson) || fixedJson;
+
+      // 3) 移除末尾多余逗号（对象或数组前）
+      candidate = candidate.replace(/,(\s*[}\]])/g, '$1');
+
+      // 4) 尝试补全未闭合的大括号/中括号（仅在显然不匹配时）
+      const count = (str: string, re: RegExp) => (str.match(re) || []).length;
+      const openBraces = count(candidate, /\{/g);
+      const closeBraces = count(candidate, /\}/g);
+      const openBrackets = count(candidate, /\[/g);
+      const closeBrackets = count(candidate, /\]/g);
+      let patched = candidate;
+      if (openBraces > closeBraces) patched += '}'.repeat(openBraces - closeBraces);
+      if (openBrackets > closeBrackets) patched += ']'.repeat(openBrackets - closeBrackets);
+
+      // 5) 尝试解析修复后的JSON
       console.log('🔧 尝试解析修复后的JSON...');
-      return JSON.parse(fixedJson);
+      return JSON.parse(patched);
 
     } catch (fixError) {
       console.error('JSON修复也失败了:', fixError);
-      console.log('原始内容:', jsonString.substring(0, 500) + '...');
+      console.log('原始内容片段:', (jsonString || '').substring(0, 500) + '...');
       return defaultValue;
     }
   }
