@@ -99,13 +99,45 @@ export interface AnalysisResult {
 }
 
 /**
- * 生成内容接口
+ * 生成内容接口 - 更新以匹配实际使用
  */
 export interface GeneratedContent {
-  title: string[];
+  titles: string;
   body: string;
-  keywords: string[];
-  image_prompt: string;
+  tags: string[];
+  imagePrompt: string;
+  selfComment: string;
+  strategy: string;
+  playbook: string;
+}
+
+/**
+ * 表单数据接口
+ */
+export interface FormData {
+  keyword: string;
+  userInfo: string;
+}
+
+/**
+ * 错误状态接口
+ */
+export interface ErrorState {
+  title: string;
+  message: string;
+  suggestion: string;
+  canRetry: boolean;
+  retryDelay?: number;
+  errorId: string;
+}
+
+/**
+ * 流式生成参数接口
+ */
+export interface StreamGenerationParams {
+  keyword: string;
+  user_info: string;
+  hot_post_rules?: string;
 }
 
 /**

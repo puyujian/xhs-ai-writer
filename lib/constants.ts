@@ -6,7 +6,7 @@
 export const API_ENDPOINTS = {
   XHS_SEARCH: 'https://edith.xiaohongshu.com/api/sns/web/v1/search/notes',
   ANALYZE_HOT_POSTS: '/api/analyze-hot-posts',
-  GENERATE_STREAM: '/api/generate-stream',
+  GENERATE_COMBINED: '/api/generate-combined',
 } as const;
 
 // 错误消息常量
@@ -39,6 +39,14 @@ export const CONFIG = {
   TARGET_NOTES_COUNT: 40,
   MAX_PAGES: 3,
   TRACE_ID_LENGTH: 16,
+  // 流式生成配置
+  MAX_CONTENT_LENGTH: 8000, // 限制内容长度，防止提示词过长
+  STREAM_CHUNK_SIZE: 8, // 流式输出时每个块的字符数
+  TYPEWRITER_INTERVAL: 30, // 打字机效果间隔(ms)
+  // 缓存配置
+  CACHE_EXPIRY_HOURS: 24, // 缓存过期时间
+  // 请求超时配置
+  REQUEST_TIMEOUT: 15000, // 15秒请求超时
 } as const;
 
 // HTTP状态码

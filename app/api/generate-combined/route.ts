@@ -1,4 +1,4 @@
-import { getGenerationPrompt, getAnalysisPrompt } from '@/lib/prompts';
+import { getAnalysisPrompt } from '@/lib/prompts';
 import { ERROR_MESSAGES, HTTP_STATUS, CONFIG } from '@/lib/constants';
 import { aiManager } from '@/lib/ai-manager';
 import { filterSensitiveContent, detectSensitiveWords } from '@/lib/sensitive-words';
@@ -7,6 +7,7 @@ import { XhsNoteItem, XhsApiResponse, ProcessedNote } from '@/lib/types';
 import { generateTraceId, getEnvVar } from '@/lib/utils';
 import { getCacheData, saveCacheData, getFallbackCacheData } from '@/lib/cache-manager';
 import { API_ENDPOINTS, XHS_CONFIG } from '@/lib/constants';
+import { BusinessError } from '@/lib/error-handler';
 
 // 调试日志控制
 const debugLoggingEnabled = process.env.ENABLE_DEBUG_LOGGING === 'true';
@@ -47,7 +48,12 @@ async function fetchHotPostsWithCache(keyword: string): Promise<string> {
     }
 
     // 4. 所有方案都失败，抛出错误
-    throw new Error(`${ERROR_MESSAGES.FETCH_HOT_POSTS_ERROR}: 无法获取数据且无可用缓存`);
+    throw new BusinessError(
+      `${ERROR_MESSAGES.FETCH_HOT_POSTS_ERROR}: 无法获取数据且无可用缓存`,
+      '获取热门数据失败',
+      '请稍后重试，如果问题持续请联系支持',
+      true
+    );
   }
 }
 
@@ -55,7 +61,12 @@ async function fetchHotPostsWithCache(keyword: string): Promise<string> {
 async function scrapeHotPosts(keyword: string): Promise<string> {
   const cookie = getEnvVar('XHS_COOKIE');
   if (!cookie) {
-    throw new Error(ERROR_MESSAGES.XHS_COOKIE_NOT_CONFIGURED);
+    throw new BusinessError(
+      ERROR_MESSAGES.XHS_COOKIE_NOT_CONFIGURED,
+      '小红书数据获取配置错误',
+      '请检查环境变量配置',
+      false
+    );
   }
 
   try {
@@ -100,7 +111,7 @@ async function scrapeHotPosts(keyword: string): Promise<string> {
 
       // 创建AbortController用于超时控制
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const timeoutId = setTimeout(() => controller.abort(), CONFIG.REQUEST_TIMEOUT);
 
       try {
         const response = await fetch(apiUrl, {
@@ -285,9 +296,8 @@ export async function POST(request: Request) {
       .trim(); // 移除首尾空白字符
 
     // 限制内容长度，防止提示词过长导致AI响应异常
-    const MAX_CONTENT_LENGTH = 8000; // 约8000字符，为提示词留出足够空间
-    if (safeContent.length > MAX_CONTENT_LENGTH) {
-      safeContent = safeContent.substring(0, MAX_CONTENT_LENGTH) + '\n\n[内容因长度限制被截断...]';
+    if (safeContent.length > CONFIG.MAX_CONTENT_LENGTH) {
+      safeContent = safeContent.substring(0, CONFIG.MAX_CONTENT_LENGTH) + '\n\n[内容因长度限制被截断...]';
       if (debugLoggingEnabled) {
         console.log(`⚠️ 内容过长已截断: ${scrapedContent.length} -> ${safeContent.length} 字符`);
       }
@@ -295,17 +305,17 @@ export async function POST(request: Request) {
 
     // 第二步：创建组合提示词，将分析和生成合并为一次AI调用
     const combinedPrompt = `
-你是一位顶尖的小红书内容策略分析师和文案创作专家。你的任务是基于以下热门笔记数据和用户提供的素材，一次性完成分析和创作。
+你是一位顶尖的小红书内容策略分析师和文案创作专家。你的任务是基于以下热门笔记数据和用户提供的素材，内化分析并直接创作。
 
-**第一步：分析热门笔记**
-请基于以下热门笔记数据，进行深度拆解，提取爆款规律：
+**【关键指令：内化过程，不要输出分析】**
+请先默默阅读并分析以下热门笔记数据，提取爆款规律（标题公式、内容结构、标签策略等），但请将分析结果完全内化为你的创作直觉，绝对不要在输出中体现任何分析过程、规律总结或思考步骤。
 
 >>> 原始内容开始 >>>
 ${safeContent}
 <<< 原始内容结束 <<<
 
-**第二步：创作爆款文案**
-基于以上分析结果和以下用户提供的素材，创作一篇小红书爆款笔记：
+**【基于内化规律直接创作】**
+现在基于你内化的爆款规律和以下用户提供的素材，直接为用户创作一篇小红书爆款笔记：
 
 >>> 用户素材开始 >>>
 ${user_info}
@@ -313,48 +323,41 @@ ${user_info}
 
 **目标关键词：** ${keyword}
 
-**请按照以下格式输出你的分析和创作：**
+**严格禁止输出：**
+- 任何分析过程或规律总结
+- "我发现..."、"通过分析..."等分析性语言
+- "规律"、"策略"、"分析"等词汇
+- 任何解释或说明性文字
 
-## 1. 爆款规律分析
-（简要总结你从热门笔记中发现的标题公式、内容结构、标签策略等关键规律）
+**请直接按以下格式输出创作成果：**
 
-## 2. 爆款标题创作（3个）
-(必须基于用户原始素材中的具体内容创作标题，严格运用爆款规律。每个标题都必须严格遵守小红书的20字以内规定，不能超过20个字。字数计算：一个中文字/英文单词/标点=1字，emoji=2字。标题必须体现用户素材中的核心信息)
+## 1. 爆款标题创作（3个）
+(必须基于用户原始素材中的具体内容创作标题，运用内化的爆款规律。每个标题都必须严格遵守小红书的20字以内规定，不能超过20个字。字数计算：一个中文字/英文单词/标点=1字，emoji=2字。标题必须体现用户素材中的核心信息)
 
-## 3. 正文内容
-(严格要求：必须基于用户提供的原始素材进行创作，不得创作与素材无关的内容。
-**反流水账要求：**
-- 禁止使用"第一步、第二步"这样的机械表述
-- 必须通过故事线串联所有内容点
-- 每个段落都要有情绪起伏或转折
-- 包含至少3个生活化细节和1个幽默元素
-- 用场景和对话替代说明文字
+## 2. 正文内容
+(严格要求：必须基于用户提供的原始素材进行创作，不得创作与素材无关的内容。运用内化的爆款写作技巧，包含生活化细节、情绪转折和互动引导。字数控制在450-750字之间，绝对不能超过800字)
 
-**核心字数要求：**内容要丰富，力求达到600字左右，但**【绝对不能超过800字】**。结尾必须引导互动)
+## 3. 关键词标签（10-15个）
+(按核心词+长尾词+场景词+人群词组合，严格去重，确保每个标签都与内容强相关)
 
-## 4. 关键词标签（10-15个）
-(标签生成策略：
-- 按核心词+长尾词+场景词+人群词组合，但仅保留与素材强相关的项
-- 严格去重，避免同义词堆砌
-- 确保每个标签都与内容有明确关联，避免为了凑数而添加无关标签)
+## 4. AI绘画提示词
+(创作适合3:4竖版比例的配图提示词，包含文字元素和色调要求)
 
-## 5. AI绘画提示词
-(创作一个生动的配图提示词，引导AI生成一张适合3:4竖版比例的图片)
+## 5. 首评关键词引导
+(写一条简短的评论区引导语，补充正文中保留的关键信息缺口)
 
-## 6. 首评关键词引导
-(写一条简短的、适合发布在自己笔记评论区的引导语，补充你在正文中故意保留的关键信息缺口)
+## 6. 发布策略建议
+(基于内容类型给出最佳发布时间建议)
 
-## 7. 发布策略建议
-(给出最佳的发布时间建议)
+## 7. 小红书增长 Playbook
+(提供专属的可行动增长核对清单，包含数据指标和优化建议)
 
-## 8. 小红书增长 Playbook
-(提供一份专属的、可行动的增长核对清单)
-
-**重要指令:**
-- 绝对不要在 "## 1. 爆款规律分析" 之前添加任何文字。
-- 绝对不要在 "## 8. 小红书增长 Playbook" 的内容之后添加任何文字。
-- **标题字数限制：每个标题必须控制在20字以内。**
-- 直接开始生成内容，从第一个##标题开始。
+**最终检查要求：**
+- 绝对不要在 "## 1. 爆款标题创作（3个）" 之前添加任何文字
+- 绝对不要在 "## 7. 小红书增长 Playbook" 之后添加任何文字  
+- 不要出现任何分析过程或规律总结
+- 标题字数限制：每个标题必须控制在20字以内
+- 直接开始生成内容，从第一个##标题开始
 `;
 
     // 创建流式响应
@@ -363,7 +366,7 @@ ${user_info}
       async start(controller) {
         // 内容清洗标志位
         let contentStarted = false;
-        const startMarker = "## 1."; // 使用更宽松的匹配，只匹配开头部分
+        const startMarker = "## 1."; // 从第1部分开始，现在直接是标题创作
         let accumulatedContent = ""; // 累积内容，用于检测开始标记
 
         // 使用AI管理器的流式生成（带重试机制）
