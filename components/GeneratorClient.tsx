@@ -12,7 +12,8 @@ import { HistoryItem } from '@/lib/history-types'
 import HistoryPanel from './HistoryPanel'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Clipboard, Check, History } from 'lucide-react'
+import { Clipboard, Check, History, Sparkles } from 'lucide-react'
+import { ds } from '@/lib/design-system'
 
 interface ErrorState {
   title: string;
@@ -580,16 +581,29 @@ export default function GeneratorClient() {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-      {/* 历史记录面板 - 桌面端显示，移动端通过按钮切换 */}
-      <div className={`lg:col-span-1 ${showHistoryPanel ? 'block' : 'hidden'} lg:block ${showHistoryPanel ? 'fixed inset-0 z-50 bg-black/50 lg:static lg:bg-transparent lg:z-auto' : ''}`}>
-        <div className={`${showHistoryPanel ? 'absolute right-0 top-0 h-full w-80 lg:static lg:w-auto' : ''} lg:min-w-[280px]`}>
-          <HistoryPanel 
-            onRestore={handleRestoreHistory}
-            className={`h-full lg:h-[calc(100vh-12rem)] ${showHistoryPanel ? 'shadow-2xl lg:shadow-none' : ''}`}
-          />
+    <div className={ds.cn(
+      'grid gap-4', // 减少间距
+      'grid-cols-1 lg:grid-cols-12',
+      'max-w-none min-h-[85vh]' // 确保固定高度
+    )}>
+      {/* 历史记录面板 - 固定高度 */}
+      <div className={ds.cn(
+        'lg:col-span-3',
+        showHistoryPanel ? 'block' : 'hidden lg:block',
+        showHistoryPanel && 'fixed inset-0 z-50 lg:static lg:z-auto',
+        showHistoryPanel && 'bg-black/20 backdrop-blur-sm lg:bg-transparent'
+      )}>
+        <div className={ds.cn(
+          showHistoryPanel && 'absolute right-0 top-0 h-full w-80 lg:static lg:w-full'
+        )}>
+          <div className="h-[85vh]"> {/* 固定高度容器 */}
+            <HistoryPanel 
+              onRestore={handleRestoreHistory}
+              className="h-full"
+            />
+          </div>
         </div>
-        {/* 移动端遮罩层点击关闭 */}
+        {/* 移动端遮罩层 */}
         {showHistoryPanel && (
           <div 
             className="absolute inset-0 lg:hidden" 
@@ -598,508 +612,637 @@ export default function GeneratorClient() {
         )}
       </div>
 
-      {/* 输入区域 */}
-      <div className="lg:col-span-2">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between mb-2">
-              <CardTitle>📝 输入内容</CardTitle>
-              {/* 移动端历史记录切换按钮 */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowHistoryPanel(!showHistoryPanel)}
-                className={`lg:hidden transition-all duration-200 ${
-                  showHistoryPanel 
-                    ? 'bg-gradient-to-r from-pink-500 to-blue-500 text-white border-transparent shadow-md' 
-                    : 'border-pink-200 text-pink-600 hover:bg-pink-50 hover:border-pink-300'
-                }`}
-              >
-                <History size={16} className="mr-1.5" />
-                <span className="font-medium">历史记录</span>
-              </Button>
-            </div>
-            <CardDescription>
-              <span className="text-pink-600 font-medium">三步生成爆款文案：</span>
-              <span className="text-gray-600"> 1. 输入主题 → 2. 提供素材 → 3. AI 创作</span>
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <label className="flex items-center gap-2 text-sm font-medium mb-2">
-                <span>🎯 笔记主题</span>
-                <span className="text-xs text-gray-500 font-normal">（关键词越具体，分析越精准）</span>
-              </label>
-              <Input
-                placeholder="例如：春季敏感肌护肤、职场穿搭技巧、平价美妆好物..."
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                disabled={loading}
-              />
-            </div>
-
-            <div>
-              <label className="flex items-center gap-2 text-sm font-medium mb-2">
-                <span>✍️ 原始素材</span>
-                <span className="text-xs text-gray-500 font-normal">（提供越详细的信息，生成效果越好）</span>
-              </label>
-              <Textarea
-                placeholder={`在这里输入你的笔记草稿、产品信息或灵感...
-
-例如：
-产品：XX牌新款玻尿酸精华
-特点：质地清爽，吸收快，主打深层补水
-我的感受：用了一周，感觉皮肤没那么干了，上妆也更服帖
-目标人群：20-30岁的年轻女性，混合皮或干皮
-价格：199元，性价比很高
-
-💡 提示：可以包含产品特点、使用感受、适用人群、价格等信息`}
-                value={userInfo}
-                onChange={(e) => setUserInfo(e.target.value)}
-                rows={10}
-                disabled={loading}
-                className="text-sm"
-              />
-            </div>
-
-            {/* 字数限制控件 */}
-            <div>
-              <label className="flex items-center gap-2 text-sm font-medium mb-2">
-                <span>📏 字数限制</span>
-                <span className="text-xs text-gray-500 font-normal">（控制生成内容的长度）</span>
-              </label>
-              <div className="flex items-center gap-3">
-                {/* 预设字数选项 */}
-                <div className="flex gap-2">
-                  {[200, 400, 600, 800].map((limit) => (
-                    <button
-                      key={limit}
-                      type="button"
-                      onClick={() => setWordLimit(limit)}
-                      disabled={loading}
-                      className={`px-3 py-1.5 text-xs rounded-md border transition-all ${
-                        wordLimit === limit
-                          ? 'bg-pink-500 text-white border-pink-500'
-                          : 'bg-white text-gray-600 border-gray-200 hover:border-pink-300 hover:text-pink-600'
-                      } ${loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                    >
-                      {limit}字
-                    </button>
-                  ))}
+      {/* 主要内容区域 - 等高布局 */}
+      <div className="lg:col-span-9">
+        <div className="grid gap-4 lg:grid-cols-2 h-[85vh]"> {/* 固定高度且减少间距 */}
+          {/* 输入区域 - 固定高度 */}
+          <div className="h-full">
+            {/* 输入卡片 - 填满高度 */}
+            <Card className={ds.cn(
+              ds.presets.card.base,
+              ds.presets.card.hover,
+              'border-slate-200 bg-white/80 backdrop-blur-sm',
+              'h-full flex flex-col' // 填满高度且使用flex布局
+            )}>
+              <CardHeader className="flex-shrink-0 pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className={ds.cn(
+                    ds.getTextStyles('lg', 'semibold'),
+                    'text-slate-800 flex items-center gap-2'
+                  )}>
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white text-sm">
+                      ✍️
+                    </span>
+                    <span>创作输入</span>
+                  </CardTitle>
+                  {/* 移动端历史记录切换按钮 */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowHistoryPanel(!showHistoryPanel)}
+                    className={ds.cn(
+                      'lg:hidden',
+                      ds.animations.transition.base,
+                      showHistoryPanel 
+                        ? 'bg-blue-500 text-white border-blue-500 shadow-sm' 
+                        : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                    )}
+                  >
+                    <History size={14} className="mr-1.5" />
+                    历史记录
+                  </Button>
                 </div>
-
-                {/* 自定义字数输入 */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">自定义：</span>
+                <CardDescription className={ds.cn(
+                  ds.getTextStyles('sm'),
+                  'text-slate-600'
+                )}>
+                  <span className="font-medium text-blue-600">三步生成爆款：</span>
+                  <span className="ml-1">主题定位 → 素材输入 → AI创作</span>
+                </CardDescription>
+              </CardHeader>
+              
+              <CardContent className="flex-1 flex flex-col gap-4 p-4">
+                {/* 主题输入 - 紧凑设计 */}
+                <div className="space-y-2">
+                  <label className={ds.cn(
+                    ds.getTextStyles('sm', 'medium'),
+                    'text-slate-700 flex items-center gap-2'
+                  )}>
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-xs font-bold">
+                      1
+                    </span>
+                    <span>笔记主题</span>
+                    <span className={ds.cn(
+                      ds.getTextStyles('xs'),
+                      'text-slate-500 font-normal'
+                    )}>
+                      （关键词越具体，效果越精准）
+                    </span>
+                  </label>
                   <Input
-                    type="number"
-                    min="100"
-                    max="1000"
-                    value={wordLimit}
-                    onChange={(e) => setWordLimit(Math.max(100, Math.min(1000, parseInt(e.target.value) || 600)))}
+                    placeholder="例如：春季敏感肌护肤、职场穿搭技巧、平价美妆好物..."
+                    value={keyword}
+                    onChange={(e) => setKeyword(e.target.value)}
                     disabled={loading}
-                    className="w-20 h-8 text-xs"
+                    className={ds.cn(
+                      'h-9', // 减少高度
+                      ds.presets.input.base,
+                      'border-slate-200 focus:border-blue-500 focus:ring-blue-500'
+                    )}
                   />
-                  <span className="text-xs text-gray-500">字</span>
                 </div>
-              </div>
-              <p className="text-xs text-gray-400 mt-1">
-                💡 建议：短文案200-400字，详细介绍600-800字，最多不超过1000字
-              </p>
-            </div>
 
-            {error && (
-              <div className="bg-red-50 border border-red-200 p-4 rounded-md">
-                <div className="flex items-start gap-3">
-                  <div className="text-red-500 text-lg">⚠️</div>
-                  <div className="flex-1">
-                    <div className="font-medium text-red-800 mb-1">{error.title}</div>
-                    <div className="text-red-700 text-sm mb-2">{error.message}</div>
-                    <div className="text-red-600 text-xs mb-3">{error.suggestion}</div>
+                {/* 素材输入 - 自适应高度 */}
+                <div className="flex-1 flex flex-col gap-2">
+                  <label className={ds.cn(
+                    ds.getTextStyles('sm', 'medium'),
+                    'text-slate-700 flex items-center gap-2'
+                  )}>
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-purple-100 text-purple-600 text-xs font-bold">
+                      2
+                    </span>
+                    <span>原始素材</span>
+                    <span className={ds.cn(
+                      ds.getTextStyles('xs'),
+                      'text-slate-500 font-normal'
+                    )}>
+                      （信息越详细，效果越好）
+                    </span>
+                  </label>
+                  <Textarea
+                    placeholder={`输入你的笔记草稿、产品信息或灵感...
 
+例如：产品：XX牌玻尿酸精华，质地清爽，吸收快
+我的感受：用了一周，皮肤水润，上妆服帖
+目标人群：20-30岁年轻女性，混合皮或干皮
+价格：199元，性价比高
+
+💡 提示：可包含产品特点、使用感受、适用人群、价格等`}
+                    value={userInfo}
+                    onChange={(e) => setUserInfo(e.target.value)}
+                    disabled={loading}
+                    className={ds.cn(
+                      'flex-1 resize-none',
+                      ds.presets.input.base,
+                      'border-slate-200 focus:border-purple-500 focus:ring-purple-500',
+                      'text-sm leading-relaxed'
+                    )}
+                  />
+                </div>
+
+                {/* 字数和操作区域 - 紧凑布局 */}
+                <div className="flex-shrink-0 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className={ds.cn(
+                      ds.getTextStyles('sm', 'medium'),
+                      'text-slate-700 flex items-center gap-2'
+                    )}>
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600 text-xs font-bold">
+                        3
+                      </span>
+                      <span>字数设定</span>
+                    </label>
+                    
+                    {/* 字数选择 - 水平排列 */}
                     <div className="flex items-center gap-2">
-                      {error.canRetry && (
-                        <Button
-                          onClick={handleRetry}
-                          size="sm"
-                          variant="outline"
-                          className="text-red-700 border-red-300 hover:bg-red-100"
+                      {[200, 400, 600, 800].map((limit) => (
+                        <button
+                          key={limit}
+                          type="button"
+                          onClick={() => setWordLimit(limit)}
+                          disabled={loading}
+                          className={ds.cn(
+                            'px-3 py-1 rounded-full text-xs font-medium',
+                            'border transition-all duration-200',
+                            wordLimit === limit
+                              ? 'bg-green-500 text-white border-green-500'
+                              : 'bg-white text-slate-600 border-slate-200 hover:border-green-300',
+                            loading && 'opacity-50 cursor-not-allowed',
+                            !loading && 'cursor-pointer'
+                          )}
                         >
-                          重试 {retryCount > 0 && `(${retryCount})`}
-                        </Button>
-                      )}
-                      <span className="text-xs text-red-500">错误ID: {error.errorId}</span>
+                          {limit}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* 自定义字数 */}
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-500">自定义字数：</span>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="100"
+                        max="1000"
+                        value={wordLimit}
+                        onChange={(e) => setWordLimit(Math.max(100, Math.min(1000, parseInt(e.target.value) || 600)))}
+                        disabled={loading}
+                        className={ds.cn(
+                          'w-20 h-7 text-xs text-center',
+                          ds.presets.input.base,
+                          'border-slate-200 focus:border-green-500 focus:ring-green-500'
+                        )}
+                      />
+                      <span className="text-slate-600">字</span>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
 
-            <div className="flex gap-2">
-              <Button
-                onClick={handleGenerate}
-                disabled={loading || !keyword.trim() || !userInfo.trim()}
-                className="flex-1 bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600"
-              >
-                {loading ? (
-                  <span className="flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    {loadingStage === 'analyzing' ? '🔍 正在分析热门笔记...' :
-                     loadingStage === 'generating' ? '✨ 正在生成文案...' : '生成中...'}
+                {/* 错误显示 - 紧凑版本 */}
+                {error && (
+                  <div className={ds.cn(
+                    'rounded-md border border-red-200 bg-red-50 p-3',
+                    'text-sm'
+                  )}>
+                    <div className="flex items-start gap-2">
+                      <span className="text-red-600 text-xs">⚠️</span>
+                      <div className="flex-1 space-y-1">
+                        <div className="font-medium text-red-800">{error.title}</div>
+                        <div className="text-red-700 text-xs">{error.message}</div>
+                        <div className="flex items-center gap-2 mt-2">
+                          {error.canRetry && (
+                            <Button
+                              onClick={handleRetry}
+                              size="sm"
+                              variant="outline"
+                              className="h-6 px-2 text-xs text-red-700 border-red-300 hover:bg-red-100"
+                            >
+                              重试
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 操作按钮 - 底部固定 */}
+                <div className="flex-shrink-0 pt-2">
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleGenerate}
+                      disabled={loading || !keyword.trim() || !userInfo.trim()}
+                      className={ds.cn(
+                        'flex-1 h-10',
+                        'bg-gradient-to-r from-blue-500 to-purple-600',
+                        'hover:from-blue-600 hover:to-purple-700',
+                        'text-white font-medium text-sm',
+                        'shadow-md',
+                        'disabled:opacity-50 disabled:cursor-not-allowed'
+                      )}
+                    >
+                      {loading ? (
+                        <span className="flex items-center gap-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                          <span className="text-xs">
+                            {loadingStage === 'analyzing' ? '分析中...' :
+                             loadingStage === 'generating' ? '生成中...' : '处理中...'}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          <Sparkles size={16} />
+                          <span>生成爆款文案</span>
+                        </span>
+                      )}
+                    </Button>
+
+                    {loading && (
+                      <Button
+                        onClick={handleStop}
+                        variant="outline"
+                        className={ds.cn(
+                          'px-4 h-10',
+                          'border-slate-300 text-slate-600 text-sm',
+                          'hover:bg-slate-50'
+                        )}
+                      >
+                        停止
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* 结果区域 - 等高设计 */}
+          <div className="h-full">
+            <Card className={ds.cn(
+              ds.presets.card.base,
+              'border-slate-200 bg-white/80 backdrop-blur-sm',
+              'h-full flex flex-col'
+            )}>
+              <CardHeader className="flex-shrink-0 pb-3">
+                <CardTitle className={ds.cn(
+                  ds.getTextStyles('lg', 'semibold'),
+                  'text-slate-800 flex items-center gap-2'
+                )}>
+                  <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-green-500 to-blue-600 text-white text-sm">
+                    ✨
                   </span>
-                ) : '✨ 生成内容'}
-              </Button>
+                  <span>生成结果</span>
+                </CardTitle>
+                <CardDescription className={ds.cn(
+                  ds.getTextStyles('sm'),
+                  'text-slate-600'
+                )}>
+                  AI智能分析并生成的爆款文案内容
+                </CardDescription>
+              </CardHeader>
+              
+              <CardContent className="flex-1 p-4 overflow-hidden">
+                {/* 滚动内容区域 */}
+                <div className="h-full overflow-y-auto space-y-4 pr-2">
+                  {/* 加载状态显示 */}
+                  {loading && !streamContent && (
+                    <div className="flex flex-col items-center justify-center h-full text-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent mb-4"></div>
+                      <div className="space-y-2">
+                        {loadingStage === 'analyzing' && (
+                          <>
+                            <p className={ds.cn(ds.getTextStyles('sm', 'medium'), 'text-slate-800')}>
+                              🔍 正在分析「{keyword}」热门笔记...
+                            </p>
+                            <p className={ds.cn(ds.getTextStyles('xs'), 'text-slate-500')}>
+                              分析爆款规律，定制创作策略
+                            </p>
+                          </>
+                        )}
+                        {loadingStage === 'generating' && (
+                          <>
+                            <p className={ds.cn(ds.getTextStyles('sm', 'medium'), 'text-slate-800')}>
+                              ✅ 分析完成！正在生成文案...
+                            </p>
+                            <p className={ds.cn(ds.getTextStyles('xs'), 'text-slate-500')}>
+                              基于热门规律，创作专属内容
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
-              {loading && (
-                <Button
-                  onClick={handleStop}
-                  variant="outline"
-                  className="px-4"
-                >
-                  停止
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                  {/* 空状态显示 */}
+                  {!loading && !streamContent && (
+                    <div className="flex flex-col items-center justify-center h-full text-center space-y-6">
+                      <div className="text-4xl mb-4">📝</div>
+                      <div className="space-y-3">
+                        <h3 className={ds.cn(ds.getTextStyles('lg', 'semibold'), 'text-slate-800')}>
+                          准备开始创作
+                        </h3>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-center gap-2 text-sm">
+                            <span className="w-5 h-5 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-bold">1</span>
+                            <span className="text-slate-600">输入主题</span>
+                            <span className="text-slate-400">→</span>
+                            <span className="w-5 h-5 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center text-xs font-bold">2</span>
+                            <span className="text-slate-600">提供素材</span>
+                            <span className="text-slate-400">→</span>
+                            <span className="w-5 h-5 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-xs font-bold">3</span>
+                            <span className="text-slate-600">AI 创作</span>
+                          </div>
+                        </div>
+                        <p className={ds.cn(ds.getTextStyles('sm'), 'text-slate-500 mt-4')}>
+                          🚀 填写左侧信息，即可开始创作
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
-      {/* 结果区域 */}
-      <div className="lg:col-span-2 space-y-6">
-        {/* 标题卡片 */}
-        <Card className={!loading && !streamContent ? 'hidden' : ''}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div>
-              <CardTitle>🎯 生成标题</CardTitle>
-              <CardDescription>AI生成的标题建议</CardDescription>
-            </div>
-            {!loading && generatedTitles && (
-              <Button
-                onClick={() => handleCopy(titlesRef.current?.innerText, 'titles')}
-                variant="outline"
-                size="sm"
-                className="w-[120px]" // 固定宽度防止文字变化时按钮抖动
-              >
-                {copiedButtonId === 'titles' ? (
-                  <span className="flex items-center gap-2"> <Check size={16} /> 已复制 </span>
-                ) : (
-                  <span className="flex items-center gap-2"> <Clipboard size={16} /> 复制标题 </span>
-                )}
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent>
-            <div ref={titlesRef} className="prose prose-pink max-w-none text-gray-800 leading-relaxed">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {generatedTitles}
-              </ReactMarkdown>
-              {loading && !generatedBody && (
-                <span className="inline-block w-2 h-5 bg-pink-500 animate-pulse ml-1"></span>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                  {/* 生成的内容 */}
+                  {(generatedTitles || generatedBody || generatedTags.length > 0 || generatedImagePrompt || generatedSelfComment || generatedStrategy || generatedPlaybook) && (
+                    <div className="space-y-4">
+                      {/* 标题 */}
+                      {generatedTitles && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h4 className={ds.cn(ds.getTextStyles('sm', 'semibold'), 'text-slate-800')}>
+                              🎯 生成标题
+                            </h4>
+                            {!loading && (
+                              <Button
+                                onClick={() => handleCopy(titlesRef.current?.innerText, 'titles')}
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-3 text-xs"
+                              >
+                                {copiedButtonId === 'titles' ? (
+                                  <><Check size={12} className="mr-1" />已复制</>
+                                ) : (
+                                  <><Clipboard size={12} className="mr-1" />复制</>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                          <div ref={titlesRef} className={ds.cn(
+                            'text-sm text-slate-800 leading-relaxed',
+                            'bg-slate-50 rounded-md p-3 border border-slate-100'
+                          )}>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {generatedTitles}
+                            </ReactMarkdown>
+                            {loading && !generatedBody && (
+                              <span className="inline-block w-1 h-4 bg-blue-500 animate-pulse ml-1"></span>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
-        {/* 内容卡片 - 只有当正文部分有内容时才显示 */}
-        <Card className={!generatedBody ? 'hidden' : ''}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div>
-              <CardTitle>📄 生成内容</CardTitle>
-              <CardDescription>AI生成的正文内容</CardDescription>
-            </div>
-            {!loading && generatedBody && (
-              <Button
-                onClick={() => handleCopy(bodyRef.current?.innerText, 'body')}
-                variant="outline"
-                size="sm"
-                className="w-[120px]"
-              >
-                {copiedButtonId === 'body' ? (
-                  <span className="flex items-center gap-2"> <Check size={16} /> 已复制 </span>
-                ) : (
-                  <span className="flex items-center gap-2"> <Clipboard size={16} /> 复制正文 </span>
-                )}
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent>
-            <div ref={bodyRef} className="prose prose-pink max-w-none text-gray-800 leading-relaxed">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {generatedBody}
-              </ReactMarkdown>
-              {loading && (
-                <span className="inline-block w-2 h-5 bg-pink-500 animate-pulse ml-1"></span>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                      {/* 正文内容 */}
+                      {generatedBody && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h4 className={ds.cn(ds.getTextStyles('sm', 'semibold'), 'text-slate-800')}>
+                              📄 正文内容
+                            </h4>
+                            {!loading && (
+                              <Button
+                                onClick={() => handleCopy(bodyRef.current?.innerText, 'body')}
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-3 text-xs"
+                              >
+                                {copiedButtonId === 'body' ? (
+                                  <><Check size={12} className="mr-1" />已复制</>
+                                ) : (
+                                  <><Clipboard size={12} className="mr-1" />复制</>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                          <div ref={bodyRef} className={ds.cn(
+                            'text-sm text-slate-800 leading-relaxed',
+                            'bg-slate-50 rounded-md p-3 border border-slate-100'
+                          )}>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {generatedBody}
+                            </ReactMarkdown>
+                            {loading && (
+                              <span className="inline-block w-1 h-4 bg-blue-500 animate-pulse ml-1"></span>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
-        {/* 标签卡片 - 只有当标签有内容时才显示 */}
-        <Card className={!generatedTags.length ? 'hidden' : ''}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div>
-              <CardTitle>🏷️ 关键词标签</CardTitle>
-              <CardDescription>AI生成的热门标签</CardDescription>
-            </div>
-            {!loading && generatedTags.length > 0 && (
-              <Button
-                onClick={() => handleCopy(tagsRef.current?.innerText?.replace(/\s+/g, ' '), 'tags')}
-                variant="outline"
-                size="sm"
-                className="w-[120px]"
-              >
-                {copiedButtonId === 'tags' ? (
-                  <span className="flex items-center gap-2"> <Check size={16} /> 已复制 </span>
-                ) : (
-                  <span className="flex items-center gap-2"> <Clipboard size={16} /> 复制标签 </span>
-                )}
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent>
-            <div ref={tagsRef} className="flex flex-wrap gap-2">
-              {generatedTags.map((tag, index) => (
-                <Badge key={index} variant="tag" className="cursor-pointer hover:scale-105 transition-transform">
-                  #{tag}
-                </Badge>
-              ))}
-              {loading && generatedTags.length === 0 && (
-                <span className="inline-block w-2 h-5 bg-pink-500 animate-pulse ml-1"></span>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                      {/* 标签 */}
+                      {generatedTags.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h4 className={ds.cn(ds.getTextStyles('sm', 'semibold'), 'text-slate-800')}>
+                              🏷️ 关键词标签
+                            </h4>
+                            {!loading && (
+                              <Button
+                                onClick={() => handleCopy(tagsRef.current?.innerText?.replace(/\s+/g, ' '), 'tags')}
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-3 text-xs"
+                              >
+                                {copiedButtonId === 'tags' ? (
+                                  <><Check size={12} className="mr-1" />已复制</>
+                                ) : (
+                                  <><Clipboard size={12} className="mr-1" />复制</>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                          <div ref={tagsRef} className="flex flex-wrap gap-1.5">
+                            {generatedTags.map((tag, index) => (
+                              <Badge key={index} variant="tag" className="text-xs px-2 py-1 cursor-pointer hover:scale-105 transition-transform">
+                                #{tag}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
-        {/* AI绘画提示词卡片 - 只有当提示词有内容时才显示 */}
-        <Card className={!generatedImagePrompt ? 'hidden' : ''}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div>
-              <CardTitle>🎨 AI绘画提示词</CardTitle>
-              <CardDescription>为配图生成的AI绘画提示</CardDescription>
-            </div>
-            {!loading && generatedImagePrompt && (
-              <Button
-                onClick={() => handleCopy(imagePromptRef.current?.innerText, 'imagePrompt')}
-                variant="outline"
-                size="sm"
-                className="w-[130px]" // 宽度微调
-              >
-                {copiedButtonId === 'imagePrompt' ? (
-                  <span className="flex items-center gap-2"> <Check size={16} /> 已复制 </span>
-                ) : (
-                  <span className="flex items-center gap-2"> <Clipboard size={16} /> 复制提示词 </span>
-                )}
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent>
-            <div ref={imagePromptRef} className="prose prose-pink max-w-none text-gray-800 leading-relaxed">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {generatedImagePrompt}
-              </ReactMarkdown>
-              {loading && (
-                <span className="inline-block w-2 h-5 bg-pink-500 animate-pulse ml-1"></span>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                      {/* AI绘画提示词 */}
+                      {generatedImagePrompt && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h4 className={ds.cn(ds.getTextStyles('sm', 'semibold'), 'text-slate-800')}>
+                              🎨 AI绘画提示词
+                            </h4>
+                            {!loading && (
+                              <Button
+                                onClick={() => handleCopy(imagePromptRef.current?.innerText, 'imagePrompt')}
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-3 text-xs"
+                              >
+                                {copiedButtonId === 'imagePrompt' ? (
+                                  <><Check size={12} className="mr-1" />已复制</>
+                                ) : (
+                                  <><Clipboard size={12} className="mr-1" />复制</>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                          <div ref={imagePromptRef} className={ds.cn(
+                            'text-sm text-slate-800 leading-relaxed',
+                            'bg-slate-50 rounded-md p-3 border border-slate-100'
+                          )}>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {generatedImagePrompt}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
+                      )}
 
-        {/* 首评引导卡片 - 只有当内容存在时才显示 */}
-        <Card className={!generatedSelfComment ? 'hidden' : ''}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div>
-              <CardTitle>💬 首评关键词引导</CardTitle>
-              <CardDescription>复制后发布在自己的评论区，提升SEO效果</CardDescription>
-            </div>
-            {!loading && generatedSelfComment && (
-              <Button
-                onClick={() => handleCopy(selfCommentRef.current?.innerText, 'selfComment')}
-                variant="outline"
-                size="sm"
-                className="w-[120px]"
-              >
-                {copiedButtonId === 'selfComment' ? (
-                  <span className="flex items-center gap-2"> <Check size={16} /> 已复制 </span>
-                ) : (
-                  <span className="flex items-center gap-2"> <Clipboard size={16} /> 复制首评 </span>
-                )}
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent>
-            <div ref={selfCommentRef} className="prose prose-pink max-w-none text-gray-800 leading-relaxed bg-gray-50 p-3 rounded-md">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {generatedSelfComment}
-              </ReactMarkdown>
-            </div>
-          </CardContent>
-        </Card>
+                      {/* 首评引导 */}
+                      {generatedSelfComment && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h4 className={ds.cn(ds.getTextStyles('sm', 'semibold'), 'text-slate-800')}>
+                              💬 首评引导
+                            </h4>
+                            {!loading && (
+                              <Button
+                                onClick={() => handleCopy(selfCommentRef.current?.innerText, 'selfComment')}
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-3 text-xs"
+                              >
+                                {copiedButtonId === 'selfComment' ? (
+                                  <><Check size={12} className="mr-1" />已复制</>
+                                ) : (
+                                  <><Clipboard size={12} className="mr-1" />复制</>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                          <div ref={selfCommentRef} className={ds.cn(
+                            'text-sm text-slate-800 leading-relaxed',
+                            'bg-amber-50 rounded-md p-3 border border-amber-100'
+                          )}>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {generatedSelfComment}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
+                      )}
 
-        {/* 发布策略建议卡片 - 只有当内容存在时才显示 */}
-        <Card className={!generatedStrategy ? 'hidden' : ''}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div>
-              <CardTitle>🚀 发布策略建议</CardTitle>
-              <CardDescription>AI基于内容类型给出的发布时机建议</CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="prose prose-pink max-w-none text-gray-800 leading-relaxed">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {generatedStrategy}
-              </ReactMarkdown>
-            </div>
-          </CardContent>
-        </Card>
+                      {/* 发布策略 */}
+                      {generatedStrategy && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h4 className={ds.cn(ds.getTextStyles('sm', 'semibold'), 'text-slate-800')}>
+                              🚀 发布策略
+                            </h4>
+                          </div>
+                          <div className={ds.cn(
+                            'text-sm text-slate-800 leading-relaxed',
+                            'bg-blue-50 rounded-md p-3 border border-blue-100'
+                          )}>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {generatedStrategy}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
+                      )}
 
-        {/* 增长Playbook卡片 - 只有当内容存在时才显示 */}
-        <Card className={!generatedPlaybook ? 'hidden' : 'border-blue-200 bg-blue-50/50'}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div>
-              <CardTitle className="text-blue-800">🚀 增长 Playbook & 数据核对清单</CardTitle>
-              <CardDescription className="text-blue-600">将理论化为行动，系统性提升流量</CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="prose prose-blue max-w-none text-gray-800 leading-relaxed">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {generatedPlaybook}
-              </ReactMarkdown>
-            </div>
-          </CardContent>
-        </Card>
+                      {/* 增长Playbook */}
+                      {generatedPlaybook && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h4 className={ds.cn(ds.getTextStyles('sm', 'semibold'), 'text-slate-800')}>
+                              📊 增长Playbook
+                            </h4>
+                          </div>
+                          <div className={ds.cn(
+                            'text-sm text-slate-800 leading-relaxed',
+                            'bg-purple-50 rounded-md p-3 border border-purple-100'
+                          )}>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {generatedPlaybook}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
+                      )}
 
-        {/* 初始占位/加载中提示 */}
-        {loading && !streamContent && (
-          <Card>
-            <CardContent className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-4"></div>
-              <div className="space-y-2">
-                {loadingStage === 'analyzing' && (
-                  <>
-                    <p className="text-gray-800 font-medium">🔍 正在分析「{keyword}」热门笔记...</p>
-                    <p className="text-gray-500 text-sm">分析爆款规律，为您定制创作策略</p>
-                  </>
-                )}
-                {loadingStage === 'generating' && (
-                  <>
-                    <p className="text-gray-800 font-medium">✅ 分析完成！正在生成文案...</p>
-                    <p className="text-gray-500 text-sm">基于热门规律，创作专属爆款内容</p>
-                  </>
-                )}
-                {!loadingStage && (
-                  <p className="text-gray-600">AI正在分析热门笔记并生成内容...</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+                      {/* 操作按钮区域 */}
+                      {!loading && (
+                        <div className="pt-2 border-t border-slate-100">
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => {
+                                const fullText = [
+                                  titlesRef.current?.innerText,
+                                  bodyRef.current?.innerText,
+                                  tagsRef.current?.innerText?.replace(/\s+/g, ' '),
+                                  imagePromptRef.current?.innerText,
+                                  selfCommentRef.current?.innerText
+                                ].filter(Boolean).join('\n\n');
+                                handleCopy(fullText, 'full');
+                              }}
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-3 text-xs flex-1"
+                            >
+                              {copiedButtonId === 'full' ? (
+                                <><Check size={12} className="mr-1" />已复制全文</>
+                              ) : (
+                                <><Clipboard size={12} className="mr-1" />复制全文</>
+                              )}
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                setStreamContent('');
+                                setGeneratedTitles('');
+                                setGeneratedBody('');
+                                setGeneratedTags([]);
+                                setGeneratedImagePrompt('');
+                                setGeneratedSelfComment('');
+                                setGeneratedStrategy('');
+                                setGeneratedPlaybook('');
+                              }}
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-3 text-xs text-red-600 border-red-200 hover:bg-red-50"
+                            >
+                              🗑️ 清空
+                            </Button>
+                          </div>
+                        </div>
+                      )}
 
-        {!loading && !streamContent && (
-          <Card>
-            <CardContent className="text-center py-12">
-              <div className="text-6xl mb-6">✨</div>
-              <div className="space-y-4">
-                <h3 className="text-xl font-bold text-gray-800">三步生成爆款文案</h3>
-                <div className="flex justify-center items-center gap-4 text-sm">
-                  <div className="flex items-center gap-2 px-3 py-2 bg-pink-50 rounded-lg">
-                    <span className="w-6 h-6 bg-pink-500 text-white rounded-full flex items-center justify-center text-xs font-bold">1</span>
-                    <span className="text-pink-700">输入主题</span>
-                  </div>
-                  <span className="text-gray-400">→</span>
-                  <div className="flex items-center gap-2 px-3 py-2 bg-red-50 rounded-lg">
-                    <span className="w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs font-bold">2</span>
-                    <span className="text-red-700">提供素材</span>
-                  </div>
-                  <span className="text-gray-400">→</span>
-                  <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-pink-50 to-red-50 rounded-lg">
-                    <span className="w-6 h-6 bg-gradient-to-r from-pink-500 to-red-500 text-white rounded-full flex items-center justify-center text-xs font-bold">3</span>
-                    <span className="bg-gradient-to-r from-pink-700 to-red-700 bg-clip-text text-transparent font-medium">AI 创作</span>
-                  </div>
+                      {/* 保存状态提示 */}
+                      {saveStatus && (
+                        <div className={ds.cn(
+                          'rounded-md p-2 text-xs flex items-center gap-2',
+                          saveStatus === 'saving' && 'bg-blue-50 border border-blue-200 text-blue-700',
+                          saveStatus === 'saved' && 'bg-green-50 border border-green-200 text-green-700',
+                          saveStatus === 'error' && 'bg-red-50 border border-red-200 text-red-700'
+                        )}>
+                          {saveStatus === 'saving' && (
+                            <>
+                              <div className="animate-spin rounded-full h-3 w-3 border border-blue-600 border-t-transparent"></div>
+                              <span>正在保存...</span>
+                            </>
+                          )}
+                          {saveStatus === 'saved' && (
+                            <>
+                              <Check size={12} className="text-green-600" />
+                              <span>已保存到历史记录</span>
+                            </>
+                          )}
+                          {saveStatus === 'error' && (
+                            <>
+                              <span>⚠️</span>
+                              <span>保存失败</span>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <p className="text-gray-500 text-sm mt-4">
-                  🚀 <span className="font-medium text-pink-600">立即填写，见证 AI 的创作魔力</span>
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* 保存状态提示 */}
-        {saveStatus && (
-          <div className={`mb-4 p-3 rounded-lg border flex items-center gap-2 text-sm transition-all duration-300 ${
-            saveStatus === 'saving' 
-              ? 'bg-blue-50 border-blue-200 text-blue-700' 
-              : saveStatus === 'saved'
-              ? 'bg-green-50 border-green-200 text-green-700'
-              : 'bg-red-50 border-red-200 text-red-700'
-          }`}>
-            {saveStatus === 'saving' && (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
-                <span>正在保存到历史记录...</span>
-              </>
-            )}
-            {saveStatus === 'saved' && (
-              <>
-                <div className="flex-shrink-0 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
-                  <Check size={12} className="text-white" />
-                </div>
-                <span>✅ 已自动保存到历史记录</span>
-              </>
-            )}
-            {saveStatus === 'error' && (
-              <>
-                <span className="text-red-500">⚠️</span>
-                <span>保存历史记录失败，请检查浏览器设置</span>
-              </>
-            )}
+              </CardContent>
+            </Card>
           </div>
-        )}
-
-        {/* 操作按钮 - 只有在生成完毕后显示 */}
-        {!loading && streamContent && (
-          <div className="flex gap-2">
-            <Button
-              onClick={() => {
-                // 将所有部分的 innerText 拼接起来
-                const fullText = [
-                  titlesRef.current?.innerText,
-                  bodyRef.current?.innerText,
-                  tagsRef.current?.innerText?.replace(/\s+/g, ' '),
-                  imagePromptRef.current?.innerText,
-                  selfCommentRef.current?.innerText
-                ].filter(Boolean).join('\n\n'); // 用两个换行符分隔，更美观
-                handleCopy(fullText, 'full');
-              }}
-              variant="outline"
-              size="sm"
-              className="w-[120px]"
-            >
-              {copiedButtonId === 'full' ? (
-                <span className="flex items-center gap-2"> <Check size={16} /> 已复制 </span>
-              ) : (
-                <span className="flex items-center gap-2"> <Clipboard size={16} /> 复制全文 </span>
-              )}
-            </Button>
-            <Button
-              onClick={() => {
-                setStreamContent('');
-                setGeneratedTitles('');
-                setGeneratedBody('');
-                setGeneratedTags([]);
-                setGeneratedImagePrompt('');
-                setGeneratedSelfComment('');
-                setGeneratedStrategy('');
-                setGeneratedPlaybook('');
-              }}
-              variant="outline"
-              size="sm"
-            >
-              🗑️ 清空内容
-            </Button>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   )
