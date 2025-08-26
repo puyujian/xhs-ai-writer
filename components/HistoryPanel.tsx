@@ -25,7 +25,7 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
   const [currentPage, setCurrentPage] = useState(1)
   
   // 分页配置
-  const ITEMS_PER_PAGE = 8
+  const ITEMS_PER_PAGE = 5 // 改为每页5条
 
   // 加载历史记录数据
   const loadHistory = useCallback(() => {
@@ -147,36 +147,42 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
   return (
     <div className={`h-full flex flex-col ${className}`}>
       <Card className="flex-1 flex flex-col bg-gradient-to-br from-white via-pink-50/30 to-blue-50/30 border-pink-200 shadow-lg">
-        <CardHeader className="flex-shrink-0 pb-4 bg-gradient-to-r from-pink-50 to-blue-50 border-b border-pink-100">
+        {/* 优化的头部设计 */}
+        <CardHeader className="flex-shrink-0 px-4 py-2.5 bg-gradient-to-r from-pink-50 to-blue-50 border-b border-pink-100">
+          {/* 标题和操作按钮 - 单行紧凑设计 */}
           <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-gray-800">
-                <div className="p-1.5 bg-gradient-to-r from-pink-500 to-blue-500 rounded-lg">
-                  <History size={18} className="text-white" />
-                </div>
-                <span className="bg-gradient-to-r from-pink-600 to-blue-600 bg-clip-text text-transparent font-bold">
+            <div className="flex items-center gap-2">
+              <div className="p-1 bg-gradient-to-r from-pink-500 to-blue-500 rounded-md">
+                <History size={14} className="text-white" />
+              </div>
+              <div className="flex flex-col">
+                <h3 className="text-sm font-semibold bg-gradient-to-r from-pink-600 to-blue-600 bg-clip-text text-transparent leading-none">
                   历史记录
-                </span>
-              </CardTitle>
-              <CardDescription className="mt-1">
+                </h3>
+                {/* 统计信息紧贴标题下方 */}
                 {stats && (
-                  <span className="text-xs text-gray-600 flex items-center gap-1">
-                    <span className="inline-block w-2 h-2 bg-green-400 rounded-full"></span>
-                    共 <span className="font-medium text-pink-600">{stats.totalItems}</span> 条记录，占用 <span className="font-medium text-blue-600">{formatStorageSize(stats.storageSize)}</span>
-                  </span>
+                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+                    <div className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-green-400 rounded-full"></span>
+                      <span>共 {stats.totalItems} 条</span>
+                    </div>
+                    <span className="text-gray-400">•</span>
+                    <span>{formatStorageSize(stats.storageSize)}</span>
+                  </div>
                 )}
-              </CardDescription>
+              </div>
             </div>
             
+            {/* 操作按钮 - 极简紧凑排列 */}
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={loadHistory}
+                className="h-6 w-6 p-0 hover:bg-white/80"
                 title="刷新"
-                className="hover:bg-white hover:shadow-sm transition-all duration-200"
               >
-                <RefreshCw size={16} className="text-gray-600" />
+                <RefreshCw size={12} className="text-gray-600" />
               </Button>
               
               {allHistory.length > 0 && (
@@ -185,20 +191,20 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
                     variant="ghost"
                     size="sm"
                     onClick={handleExport}
-                    title="导出历史记录"
-                    className="hover:bg-blue-50 hover:text-blue-600 transition-all duration-200"
+                    className="h-6 w-6 p-0 hover:bg-blue-50 hover:text-blue-600"
+                    title="导出记录"
                   >
-                    <Download size={16} />
+                    <Download size={12} />
                   </Button>
                   
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={handleClearAll}
-                    className="text-red-500 hover:text-red-600 hover:bg-red-50 transition-all duration-200"
-                    title="清空所有记录"
+                    className="h-6 w-6 p-0 text-red-500 hover:text-red-600 hover:bg-red-50"
+                    title="清空记录"
                   >
-                    <Trash2 size={16} />
+                    <Trash2 size={12} />
                   </Button>
                 </>
               )}
@@ -207,7 +213,7 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
         </CardHeader>
 
         <CardContent className="flex-1 flex flex-col overflow-hidden p-4">
-          {/* 搜索和筛选 */}
+          {/* 搜索框 - 简化为单行 */}
           {allHistory.length > 0 && (
             <HistorySearch
               onSearch={handleSearch}
@@ -226,7 +232,7 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
             </div>
           )}
 
-          {/* 历史记录列表 */}
+          {/* 历史记录列表 - 去掉内嵌分页 */}
           <div className="flex-1 overflow-y-auto">
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-12">
@@ -237,41 +243,17 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
                 <span className="mt-3 text-gray-600 text-sm">加载历史记录中...</span>
               </div>
             ) : paginationData.currentItems.length > 0 ? (
-              <>
-                <div className="space-y-3 pb-4">
-                  {paginationData.currentItems.map((item) => (
-                    <HistoryItemComponent
-                      key={item.id}
-                      item={item}
-                      onRestore={onRestore}
-                      onDelete={handleDelete}
-                      onCopy={handleCopy}
-                    />
-                  ))}
-                </div>
-                
-                {/* 分页控件 */}
-                {paginationData.totalPages > 1 && (
-                  <div className="border-t border-gradient-to-r from-pink-100 to-blue-100 pt-4 mt-6">
-                    <div className="bg-gradient-to-r from-pink-50/50 to-blue-50/50 rounded-lg p-4">
-                      <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
-                        <span className="flex items-center gap-1">
-                          <span className="inline-block w-2 h-2 bg-gradient-to-r from-pink-400 to-blue-400 rounded-full"></span>
-                          显示第 {paginationData.startIndex + 1} - {paginationData.endIndex} 条，
-                          共 {paginationData.totalItems} 条记录
-                        </span>
-                      </div>
-                      <Pagination
-                        currentPage={currentPage}
-                        totalPages={paginationData.totalPages}
-                        onPageChange={handlePageChange}
-                        showPageInfo={false}
-                        className="justify-center"
-                      />
-                    </div>
-                  </div>
-                )}
-              </>
+              <div className="space-y-3">
+                {paginationData.currentItems.map((item) => (
+                  <HistoryItemComponent
+                    key={item.id}
+                    item={item}
+                    onRestore={onRestore}
+                    onDelete={handleDelete}
+                    onCopy={handleCopy}
+                  />
+                ))}
+              </div>
             ) : allHistory.length > 0 ? (
               // 有历史记录但搜索结果为空
               <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -304,29 +286,54 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
             )}
           </div>
 
-          {/* 存储统计信息 */}
-          {stats && stats.totalItems > 0 && (
-            <div className="flex-shrink-0 mt-4 pt-3 border-t border-gradient-to-r from-pink-100 to-blue-100">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-600 flex items-center gap-1">
-                  <span className="inline-block w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
-                  最多保存 50 条记录
-                </span>
-                <Badge 
-                  variant="outline" 
-                  className={`text-xs transition-colors ${
-                    stats.totalItems >= 45 
-                      ? 'bg-orange-50 border-orange-200 text-orange-700' 
-                      : stats.totalItems >= 30 
-                      ? 'bg-yellow-50 border-yellow-200 text-yellow-700'
-                      : 'bg-green-50 border-green-200 text-green-700'
-                  }`}
-                >
-                  {stats.totalItems}/50
-                </Badge>
+          {/* 固定底部：分页控件 + 存储统计 */}
+          <div className="flex-shrink-0 mt-4 space-y-3">
+            {/* 分页控件 - 固定在底部 */}
+            {paginationData.totalPages > 1 && (
+              <div className="pt-3 border-t border-gray-100">
+                <div className="bg-gradient-to-r from-pink-50/50 to-blue-50/50 rounded-lg p-3">
+                  <div className="flex items-center justify-between text-xs text-gray-600 mb-3">
+                    <span className="flex items-center gap-1">
+                      <span className="inline-block w-1.5 h-1.5 bg-gradient-to-r from-pink-400 to-blue-400 rounded-full"></span>
+                      显示第 {paginationData.startIndex + 1} - {paginationData.endIndex} 条，
+                      共 {paginationData.totalItems} 条记录
+                    </span>
+                  </div>
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={paginationData.totalPages}
+                    onPageChange={handlePageChange}
+                    showPageInfo={false}
+                    className="justify-center"
+                  />
+                </div>
               </div>
-            </div>
-          )}
+            )}
+
+            {/* 存储统计信息 */}
+            {stats && stats.totalItems > 0 && (
+              <div className="pt-2 border-t border-gray-100">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-600 flex items-center gap-1">
+                    <span className="inline-block w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
+                    最多保存 50 条记录
+                  </span>
+                  <Badge 
+                    variant="outline" 
+                    className={`text-xs transition-colors ${
+                      stats.totalItems >= 45 
+                        ? 'bg-orange-50 border-orange-200 text-orange-700' 
+                        : stats.totalItems >= 30 
+                        ? 'bg-yellow-50 border-yellow-200 text-yellow-700'
+                        : 'bg-green-50 border-green-200 text-green-700'
+                    }`}
+                  >
+                    {stats.totalItems}/50
+                  </Badge>
+                </div>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>
