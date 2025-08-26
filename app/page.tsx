@@ -15,7 +15,7 @@ export default function Home() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-50">
       {/* 通知栏 */}
       <NotificationBanner onVisibilityChange={setShowNotification} />
 
@@ -33,7 +33,7 @@ export default function Home() {
             'text-slate-900 tracking-tight'
           )}>
             <span className="inline-block">🔥</span>
-            <span className={ds.getGradientText('brand')}>
+            <span className="bg-gradient-to-r from-pink-600 to-red-600 bg-clip-text text-transparent font-bold">
               AI小红书爆款文案生成器
             </span>
           </h1>

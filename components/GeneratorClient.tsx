@@ -584,7 +584,7 @@ export default function GeneratorClient() {
     <div className={ds.cn(
       'grid gap-4',
       'grid-cols-1 lg:grid-cols-12',
-      'max-w-none min-h-[70vh]', // 设置合理的最小高度，让Grid有基础高度来分配
+      'max-w-none min-h-[600px]', // 减少最小高度，不要占用整个视窗
       'auto-rows-fr' // 确保Grid行具有相等的高度
     )}>
       {/* 历史记录面板 - CSS Grid自动等高 */}
