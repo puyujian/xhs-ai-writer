@@ -582,11 +582,11 @@ export default function GeneratorClient() {
 
   return (
     <div className={ds.cn(
-      'grid gap-4', // 减少间距
+      'grid gap-4',
       'grid-cols-1 lg:grid-cols-12',
-      'max-w-none min-h-[85vh]' // 确保固定高度
+      'max-w-none items-start' // 改为items-start，让内容自然增长
     )}>
-      {/* 历史记录面板 - 固定高度 */}
+      {/* 历史记录面板 - 自适应高度 */}
       <div className={ds.cn(
         'lg:col-span-3',
         showHistoryPanel ? 'block' : 'hidden lg:block',
@@ -596,12 +596,14 @@ export default function GeneratorClient() {
         <div className={ds.cn(
           showHistoryPanel && 'absolute right-0 top-0 h-full w-80 lg:static lg:w-full'
         )}>
-          <div className="h-[85vh]"> {/* 固定高度容器 */}
-            <HistoryPanel 
-              onRestore={handleRestoreHistory}
-              className="h-full"
-            />
-          </div>
+          {/* 移除固定高度，让历史记录面板自适应 */}
+          <HistoryPanel 
+            onRestore={handleRestoreHistory}
+            className={ds.cn(
+              showHistoryPanel ? 'h-full lg:h-auto' : 'h-auto',
+              'lg:min-h-[600px]' // 设置最小高度，但允许增长
+            )}
+          />
         </div>
         {/* 移动端遮罩层 */}
         {showHistoryPanel && (
@@ -612,17 +614,17 @@ export default function GeneratorClient() {
         )}
       </div>
 
-      {/* 主要内容区域 - 等高布局 */}
+      {/* 主要内容区域 - 自适应高度 */}
       <div className="lg:col-span-9">
-        <div className="grid gap-4 lg:grid-cols-2 h-[85vh]"> {/* 固定高度且减少间距 */}
-          {/* 输入区域 - 固定高度 */}
-          <div className="h-full">
-            {/* 输入卡片 - 填满高度 */}
+        <div className="grid gap-4 lg:grid-cols-2 items-start"> {/* 移除固定高度，添加items-start */}
+          {/* 输入区域 - 自适应高度 */}
+          <div className="min-h-[600px]"> {/* 只设置最小高度 */}
+            {/* 输入卡片 - 自适应高度 */}
             <Card className={ds.cn(
               ds.presets.card.base,
               ds.presets.card.hover,
               'border-slate-200 bg-white/80 backdrop-blur-sm',
-              'h-full flex flex-col' // 填满高度且使用flex布局
+              'min-h-[600px] flex flex-col' // 最小高度，自适应增长
             )}>
               <CardHeader className="flex-shrink-0 pb-3">
                 <div className="flex items-center justify-between">
@@ -867,12 +869,12 @@ export default function GeneratorClient() {
             </Card>
           </div>
 
-          {/* 结果区域 - 等高设计 */}
-          <div className="h-full">
+          {/* 结果区域 - 自适应高度 */}
+          <div className="min-h-[600px]"> {/* 只设置最小高度 */}
             <Card className={ds.cn(
               ds.presets.card.base,
               'border-slate-200 bg-white/80 backdrop-blur-sm',
-              'h-full flex flex-col'
+              'min-h-[600px] flex flex-col' // 最小高度，自适应增长
             )}>
               <CardHeader className="flex-shrink-0 pb-3">
                 <CardTitle className={ds.cn(
@@ -892,12 +894,12 @@ export default function GeneratorClient() {
                 </CardDescription>
               </CardHeader>
               
-              <CardContent className="flex-1 p-4 overflow-hidden">
-                {/* 滚动内容区域 */}
-                <div className="h-full overflow-y-auto space-y-4 pr-2">
+              <CardContent className="flex-1 p-4"> {/* 移除overflow-hidden，让内容自然增长 */}
+                {/* 内容区域 - 自然增长 */}
+                <div className="space-y-4">
                   {/* 加载状态显示 */}
                   {loading && !streamContent && (
-                    <div className="flex flex-col items-center justify-center h-full text-center">
+                    <div className="flex flex-col items-center justify-center min-h-[300px] text-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent mb-4"></div>
                       <div className="space-y-2">
                         {loadingStage === 'analyzing' && (
@@ -926,7 +928,7 @@ export default function GeneratorClient() {
 
                   {/* 空状态显示 */}
                   {!loading && !streamContent && (
-                    <div className="flex flex-col items-center justify-center h-full text-center space-y-6">
+                    <div className="flex flex-col items-center justify-center min-h-[300px] text-center space-y-6">
                       <div className="text-4xl mb-4">📝</div>
                       <div className="space-y-3">
                         <h3 className={ds.cn(ds.getTextStyles('lg', 'semibold'), 'text-slate-800')}>
