@@ -584,9 +584,10 @@ export default function GeneratorClient() {
     <div className={ds.cn(
       'grid gap-4',
       'grid-cols-1 lg:grid-cols-12',
-      'max-w-none items-start' // 改为items-start，让内容自然增长
+      'max-w-none min-h-[70vh]', // 设置合理的最小高度，让Grid有基础高度来分配
+      'auto-rows-fr' // 确保Grid行具有相等的高度
     )}>
-      {/* 历史记录面板 - 自适应高度 */}
+      {/* 历史记录面板 - CSS Grid自动等高 */}
       <div className={ds.cn(
         'lg:col-span-3',
         showHistoryPanel ? 'block' : 'hidden lg:block',
@@ -594,14 +595,14 @@ export default function GeneratorClient() {
         showHistoryPanel && 'bg-black/20 backdrop-blur-sm lg:bg-transparent'
       )}>
         <div className={ds.cn(
-          showHistoryPanel && 'absolute right-0 top-0 h-full w-80 lg:static lg:w-full'
+          showHistoryPanel && 'absolute right-0 top-0 h-full w-80 lg:static lg:w-full',
+          'h-full' // 让容器填满Grid分配的高度
         )}>
-          {/* 移除固定高度，让历史记录面板自适应 */}
           <HistoryPanel 
             onRestore={handleRestoreHistory}
             className={ds.cn(
-              showHistoryPanel ? 'h-full lg:h-auto' : 'h-auto',
-              'lg:min-h-[600px]' // 设置最小高度，但允许增长
+              showHistoryPanel ? 'h-full lg:h-full' : 'h-full',
+              'flex flex-col' // 使用flex让内容自然分布
             )}
           />
         </div>
@@ -614,17 +615,17 @@ export default function GeneratorClient() {
         )}
       </div>
 
-      {/* 主要内容区域 - 自适应高度 */}
-      <div className="lg:col-span-9">
-        <div className="grid gap-4 lg:grid-cols-2 items-start"> {/* 移除固定高度，添加items-start */}
-          {/* 输入区域 - 自适应高度 */}
-          <div className="min-h-[600px]"> {/* 只设置最小高度 */}
-            {/* 输入卡片 - 自适应高度 */}
+      {/* 主要内容区域 - CSS Grid自动等高 */}
+      <div className="lg:col-span-9 h-full"> {/* 填满Grid高度 */}
+        <div className="grid gap-4 lg:grid-cols-2 h-full"> {/* 内部也用等高Grid */}
+          {/* 输入区域 - 自然内容分布 */}
+          <div className="flex flex-col"> {/* flex容器让内容自然分布 */}
+            {/* 输入卡片 - 填满容器但内容自然分布 */}
             <Card className={ds.cn(
               ds.presets.card.base,
               ds.presets.card.hover,
               'border-slate-200 bg-white/80 backdrop-blur-sm',
-              'min-h-[600px] flex flex-col' // 最小高度，自适应增长
+              'h-full flex flex-col' // 填满flex容器，内部用flex自然分布
             )}>
               <CardHeader className="flex-shrink-0 pb-3">
                 <div className="flex items-center justify-between">
@@ -869,12 +870,12 @@ export default function GeneratorClient() {
             </Card>
           </div>
 
-          {/* 结果区域 - 自适应高度 */}
-          <div className="min-h-[600px]"> {/* 只设置最小高度 */}
+          {/* 结果区域 - 自然内容分布 */}
+          <div className="flex flex-col"> {/* flex容器让内容自然分布 */}
             <Card className={ds.cn(
               ds.presets.card.base,
               'border-slate-200 bg-white/80 backdrop-blur-sm',
-              'min-h-[600px] flex flex-col' // 最小高度，自适应增长
+              'h-full flex flex-col' // 填满flex容器，内部用flex自然分布
             )}>
               <CardHeader className="flex-shrink-0 pb-3">
                 <CardTitle className={ds.cn(
@@ -894,9 +895,9 @@ export default function GeneratorClient() {
                 </CardDescription>
               </CardHeader>
               
-              <CardContent className="flex-1 p-4"> {/* 移除overflow-hidden，让内容自然增长 */}
-                {/* 内容区域 - 自然增长 */}
-                <div className="space-y-4">
+              <CardContent className="flex-1 p-4 min-h-0"> {/* flex-1自动占用剩余空间，min-h-0允许滚动 */}
+                {/* 当内容很多时可以滚动，但保持卡片高度同步 */}
+                <div className="h-full overflow-y-auto space-y-4 pr-2">
                   {/* 加载状态显示 */}
                   {loading && !streamContent && (
                     <div className="flex flex-col items-center justify-center min-h-[300px] text-center">
