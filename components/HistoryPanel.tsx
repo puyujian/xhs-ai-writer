@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -9,6 +9,7 @@ import { historyManager } from '@/lib/history-manager'
 import HistoryItemComponent from './HistoryItem'
 import HistorySearch from './HistorySearch'
 import { History, Download, Trash2, RefreshCw, AlertCircle } from 'lucide-react'
+import { Pagination } from '@/components/ui/pagination'
 
 interface HistoryPanelProps {
   onRestore: (item: HistoryItem) => void
@@ -21,6 +22,10 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
   const [stats, setStats] = useState<HistoryStats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [copiedContent, setCopiedContent] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  
+  // 分页配置
+  const ITEMS_PER_PAGE = 8
 
   // 加载历史记录数据
   const loadHistory = useCallback(() => {
@@ -48,11 +53,13 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
   const handleSearch = useCallback((options: HistorySearchOptions) => {
     const filtered = historyManager.searchHistory(options)
     setFilteredHistory(filtered)
+    setCurrentPage(1) // 重置到第一页
   }, [])
 
   // 清除搜索筛选
   const handleClearSearch = useCallback(() => {
     setFilteredHistory(allHistory)
+    setCurrentPage(1) // 重置到第一页
   }, [allHistory])
 
   // 删除历史记录项
@@ -60,6 +67,7 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
     const success = historyManager.deleteHistoryItem(id)
     if (success) {
       loadHistory() // 重新加载数据
+      setCurrentPage(1) // 重置到第一页
     }
   }, [loadHistory])
 
@@ -102,6 +110,7 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
       const success = historyManager.clearAllHistory()
       if (success) {
         loadHistory() // 重新加载数据
+        setCurrentPage(1) // 重置到第一页
       }
     }
   }, [loadHistory])
@@ -112,6 +121,28 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
+
+  // 分页计算
+  const paginationData = useMemo(() => {
+    const totalItems = filteredHistory.length
+    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE)
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+    const endIndex = startIndex + ITEMS_PER_PAGE
+    const currentItems = filteredHistory.slice(startIndex, endIndex)
+    
+    return {
+      totalPages,
+      currentItems,
+      totalItems,
+      startIndex,
+      endIndex: Math.min(endIndex, totalItems)
+    }
+  }, [filteredHistory, currentPage])
+
+  // 处理页面变化
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page)
+  }, [])
 
   return (
     <div className={`h-full flex flex-col ${className}`}>
@@ -205,18 +236,42 @@ export default function HistoryPanel({ onRestore, className = '' }: HistoryPanel
                 </div>
                 <span className="mt-3 text-gray-600 text-sm">加载历史记录中...</span>
               </div>
-            ) : filteredHistory.length > 0 ? (
-              <div className="space-y-3 pb-4">
-                {filteredHistory.map((item) => (
-                  <HistoryItemComponent
-                    key={item.id}
-                    item={item}
-                    onRestore={onRestore}
-                    onDelete={handleDelete}
-                    onCopy={handleCopy}
-                  />
-                ))}
-              </div>
+            ) : paginationData.currentItems.length > 0 ? (
+              <>
+                <div className="space-y-3 pb-4">
+                  {paginationData.currentItems.map((item) => (
+                    <HistoryItemComponent
+                      key={item.id}
+                      item={item}
+                      onRestore={onRestore}
+                      onDelete={handleDelete}
+                      onCopy={handleCopy}
+                    />
+                  ))}
+                </div>
+                
+                {/* 分页控件 */}
+                {paginationData.totalPages > 1 && (
+                  <div className="border-t border-gradient-to-r from-pink-100 to-blue-100 pt-4 mt-6">
+                    <div className="bg-gradient-to-r from-pink-50/50 to-blue-50/50 rounded-lg p-4">
+                      <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
+                        <span className="flex items-center gap-1">
+                          <span className="inline-block w-2 h-2 bg-gradient-to-r from-pink-400 to-blue-400 rounded-full"></span>
+                          显示第 {paginationData.startIndex + 1} - {paginationData.endIndex} 条，
+                          共 {paginationData.totalItems} 条记录
+                        </span>
+                      </div>
+                      <Pagination
+                        currentPage={currentPage}
+                        totalPages={paginationData.totalPages}
+                        onPageChange={handlePageChange}
+                        showPageInfo={false}
+                        className="justify-center"
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
             ) : allHistory.length > 0 ? (
               // 有历史记录但搜索结果为空
               <div className="flex flex-col items-center justify-center py-12 text-center">
