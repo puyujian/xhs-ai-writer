@@ -38,3 +38,6 @@ next-env.d.ts
 # cache data
 /data/cache/
 *.cache
+
+# MCP workflow
+.spec-workflow/
