@@ -42,8 +42,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 AI 管理器 (`lib/ai-manager.ts`) 支持智能模型切换：
 - 从 `AI_MODEL_NAME` 环境变量读取逗号分隔的模型列表
 - 按顺序尝试每个模型，每个模型有独立的重试次数（默认 2 次）
-- 使用指数退避策略处理临时故障
-- 特别处理 Gemini 模型（不使用 `response_format: json_object`）
+- 使用指数退避策略处理临时故障（初始 1 秒，最大 8 秒）
+- 特别处理 Gemini 模型（不使用 `response_format: json_object`，避免 choices 为空错误）
+
+**降级流程示例**（配置：`gemini-2.5-pro,gemini-2.5-flash`）：
+1. 尝试 `gemini-2.5-pro`（重试 2 次，间隔 1s、2s）
+2. 失败后切换到 `gemini-2.5-flash`（重试 2 次）
+3. 所有模型失败后抛出错误
+4. 下次请求重新从第一个模型开始
+
+**错误处理**：
+- 网络错误：自动重试
+- API 配额错误：立即切换下一个模型
+- JSON 解析错误：记录日志并重试
 
 ### 三重安全保障
 
@@ -62,11 +73,36 @@ AI 管理器 (`lib/ai-manager.ts`) 支持智能模型切换：
 ### 缓存系统
 
 智能三层降级策略 (`lib/cache-manager.ts`)：
-1. 优先使用有效缓存（默认 24 小时）
-2. 实时抓取小红书数据
-3. 降级到同分类备用缓存
-- 缓存文件存储在 `data/cache/` 目录
-- 可通过 `ENABLE_CACHE` 环境变量控制
+1. **优先使用有效缓存**（默认 24 小时，可配置）
+   - 检查 `data/cache/{keyword}.json` 是否存在且未过期
+   - 缓存文件包含 `processedNotes` 和 `timestamp`
+   - ⚠️ 注意：如果 `ENABLE_SCRAPING=false`，将跳过所有缓存读取
+2. **实时抓取小红书数据**（可通过环境变量禁用）
+   - 使用 `XHS_COOKIE` 调用小红书搜索 API
+   - 抓取成功后自动保存到缓存
+   - 可通过 `ENABLE_SCRAPING=false` 完全禁用爬取功能
+3. **降级到同分类备用缓存**
+   - 如果抓取失败，查找最近的备用缓存文件
+   - 使用其他关键词的缓存数据作为应急方案
+   - ⚠️ 注意：如果 `ENABLE_SCRAPING=false`，将跳过备用缓存
+
+**配置选项**：
+- `ENABLE_CACHE=true/false`: 启用/禁用缓存功能（仅当 `ENABLE_SCRAPING=true` 时生效）
+- `ENABLE_SCRAPING=true/false`: 启用/禁用小红书爬取功能
+  - `true`（推荐）: 使用完整的三层降级策略（缓存 → 爬取 → 备用缓存）
+  - `false`: 完全跳过数据获取，不读取任何缓存，直接基于用户素材创作
+- `CACHE_CONFIG.expiryHours`: 缓存过期时间（默认 24 小时）
+- `CACHE_CONFIG.maxFallbackAge`: 备用缓存最大年龄（默认 7 天）
+- 缓存文件存储在 `data/cache/` 目录（需要写权限）
+
+**使用场景**：
+- **`ENABLE_SCRAPING=true`**（默认）：
+  - 适用于：生产环境、需要基于真实热门数据生成内容
+  - 优势：生成的内容更贴合当前爆款趋势
+- **`ENABLE_SCRAPING=false`**：
+  - 适用于：测试环境、不想调用小红书 API、仅依赖 AI 知识创作
+  - 优势：不依赖外部数据，响应更快，无 Cookie 失效问题
+  - 注意：生成的内容完全基于 AI 对爆款内容的理解，可能不如有参考数据的效果好
 
 ## 开发命令
 
@@ -83,9 +119,11 @@ npm run build
 # 启动生产服务器
 npm start
 
-# 代码检查
+# 代码检查（ESLint）
 npm run lint
 ```
+
+**注意**：当前项目没有配置测试脚本。如需添加测试，建议使用 Jest + React Testing Library。
 
 ## 环境变量配置
 
@@ -102,38 +140,72 @@ XHS_COOKIE="your_xiaohongshu_cookie_here"
 
 # 可选配置
 ENABLE_CACHE=true  # 缓存开关
+ENABLE_SCRAPING=true  # 爬取开关（新增）
 ENABLE_DEBUG_LOGGING=true  # 调试日志
 PRODUCTION_URL="https://your-domain.vercel.app"  # 生产环境 CORS
 ```
+
+**新增环境变量说明**：
+- `ENABLE_SCRAPING`: 控制小红书爬取功能
+  - `true`（默认）: 启用完整的数据获取流程（缓存 → 爬取 → 备用缓存）
+  - `false`: 完全禁用数据获取（不使用缓存），直接基于用户素材和 AI 知识创作
+  - 适用场景：
+    - 设置为 `false`: 测试环境、Cookie 失效、不想依赖外部数据
+    - 设置为 `true`: 生产环境、需要基于热门趋势生成更精准的内容
 
 ## 项目结构
 
 ```
 app/
 ├── api/
-│   ├── analyze-hot-posts/    # 已废弃：热门分析 API
-│   ├── generate-combined/    # 主 API：组合分析+生成流程
+│   ├── analyze-hot-posts/    # ⚠️ 已废弃：独立热门分析 API
+│   ├── generate-combined/    # ✅ 主 API：组合分析+生成流程（生产环境使用）
 │   └── cron/clean-cache/     # 定时清理缓存
 ├── globals.css               # 全局样式（含自定义动画）
 ├── layout.tsx                # 根布局（含 metadata）
-└── page.tsx                  # 主页面
+└── page.tsx                  # 主页面（服务端渲染）
 
 components/
-├── GeneratorClient.tsx       # 核心客户端组件（表单+流式输出）
+├── GeneratorClient.tsx       # 核心客户端组件（表单+流式输出+状态管理）
+├── AuthorCard.tsx            # 作者信息卡片
+├── FaqSection.tsx            # FAQ 常见问题
+├── StructuredData.tsx        # SEO 结构化数据
 └── ui/                       # Shadcn/ui 组件库
 
 lib/
-├── prompts.ts                # 提示词管理（核心）
-├── ai-manager.ts             # AI 交互管理（重试+验证）
-├── cache-manager.ts          # 缓存管理
-├── sensitive-words.ts        # 敏感词过滤
-├── error-handler.ts          # 错误处理
-├── constants.ts              # 常量定义
+├── prompts.ts                # 提示词管理（核心，v2.2 版本）
+├── ai-manager.ts             # AI 交互管理（重试+验证+模型降级）
+├── cache-manager.ts          # 缓存管理（三层降级策略）
+├── sensitive-words.ts        # 敏感词过滤（105+ 词库）
+├── error-handler.ts          # 错误处理（BusinessError）
+├── constants.ts              # 常量定义（API端点、配置）
 ├── types.ts                  # TypeScript 类型定义
 └── utils.ts                  # 工具函数
 ```
 
 ## 关键技术要点
+
+### 完整请求生命周期
+
+**用户提交表单 → 生成内容的完整数据流**：
+
+1. **客户端发起请求** (`components/GeneratorClient.tsx`)
+   - 用户填写关键词和素材信息
+   - 调用 `fetch('/api/generate-combined', { method: 'POST' })`
+   - 监听 ReadableStream 流式响应
+
+2. **服务端处理** (`app/api/generate-combined/route.ts`)
+   - 验证输入参数（关键词、用户信息）
+   - 调用 `fetchHotPostsWithCache(keyword)` 获取热门笔记数据
+   - 使用 AI 分析专家生成分析报告（JSON 格式）
+   - 使用 AI 创作专家基于分析结果生成内容（流式输出）
+   - 每个 chunk 经过敏感词过滤后发送到客户端
+
+3. **客户端实时渲染**
+   - 使用 `useEffect` 监听 `generatedContent` 变化
+   - 正则表达式解析出 4 个部分：标题、正文、标签、AI 绘画提示
+   - 打字机效果逐字显示内容
+   - 独立复制按钮支持单独复制每个部分
 
 ### 流式生成处理
 
@@ -142,6 +214,13 @@ lib/
 - 使用 `aiManager.generateStreamWithRetry` 处理 AI 流式输出
 - 自动清洗前置内容，只输出从 `## 1.` 开始的正文
 - 每个 chunk 实时进行敏感词过滤
+
+**工作流程**：
+1. 通过 `fetchHotPostsWithCache` 获取小红书热门数据（三层降级：缓存 → 爬取 → 备用缓存）
+2. 调用 `aiManager.generateAnalysisWithRetry` 分析热门笔记（JSON 格式）
+3. 基于分析结果调用 `aiManager.generateStreamWithRetry` 流式生成内容
+4. 使用 `TextEncoder` 将数据流式传输到客户端
+5. 客户端 `GeneratorClient.tsx` 实时解析并显示（打字机效果）
 
 ### JSON 响应验证
 
@@ -492,14 +571,39 @@ const CACHE_CONFIG = {
 ### Vercel 部署
 
 1. 确保在 Vercel 项目设置中配置所有环境变量
-2. `data/cache/` 目录在 Vercel 中是临时的，每次部署会清空
+2. **重要**：`data/cache/` 目录在 Vercel 中是临时的，每次部署会清空
+   - Vercel 使用无服务器函数，不支持持久化文件系统
+   - 建议使用外部存储（如 Vercel KV、Redis）或接受缓存在每次部署后失效
 3. 可选：配置 Vercel Cron Jobs 调用 `/api/cron/clean-cache`
+4. **调整超时时间**：如果生成时间较长，在 `vercel.json` 中设置 `maxDuration`
+
+### 本地生产环境测试
+
+```bash
+# 构建生产版本
+npm run build
+
+# 启动生产服务器
+npm start
+
+# 访问 http://localhost:3000 测试
+```
 
 ### 性能优化
 
-- 缓存功能在生产环境强烈推荐开启
+- 缓存功能在生产环境强烈推荐开启（减少 API 调用）
 - 如果 API 调用频繁失败，检查模型降级配置
 - 调整 `CONFIG.REQUEST_TIMEOUT`（默认 15 秒）以适应网络环境
+- 使用 `ENABLE_DEBUG_LOGGING=false` 减少日志输出（生产环境）
+
+### 监控建议
+
+生产环境建议监控以下指标：
+- API 请求成功率和响应时间
+- 模型降级触发频率
+- 缓存命中率（有效缓存 vs 备用缓存 vs 实时抓取）
+- 敏感词过滤触发次数
+- AIGC 检测率（目标 < 10%）
 
 ## 常见问题排查
 
