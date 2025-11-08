@@ -133,6 +133,7 @@ npm run dev
 - ✅ 新增 `GET /api/health` 用于服务健康检查与监控
 - ✅ 新增 `GET/DELETE /api/cache` 便捷管理缓存数据
 - 📘 详细接口说明、请求示例与错误码请参考仓库根目录的 [API_DOCUMENTATION.md](./API_DOCUMENTATION.md)
+- 🔗 **n8n 工作流集成**：完整的 n8n 集成指南请查看 [N8N_INTEGRATION_GUIDE.md](./N8N_INTEGRATION_GUIDE.md)
 
 ## 项目结构
 
