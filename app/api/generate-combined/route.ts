@@ -3,11 +3,9 @@ import { ERROR_MESSAGES, HTTP_STATUS, CONFIG } from '@/lib/constants';
 import { aiManager } from '@/lib/ai-manager';
 import { filterSensitiveContent, detectSensitiveWords } from '@/lib/sensitive-words';
 import { sanitizeText } from '@/lib/utils';
-import { XhsNoteItem, XhsApiResponse, ProcessedNote } from '@/lib/types';
-import { generateTraceId, getEnvVar } from '@/lib/utils';
 import { getCacheData, saveCacheData, getFallbackCacheData } from '@/lib/cache-manager';
-import { API_ENDPOINTS, XHS_CONFIG } from '@/lib/constants';
 import { BusinessError } from '@/lib/error-handler';
+import { fetchHotPostsViaMCP } from '@/lib/mcp-client';
 
 // 调试日志控制
 const debugLoggingEnabled = process.env.ENABLE_DEBUG_LOGGING === 'true';
@@ -67,216 +65,21 @@ async function fetchHotPostsWithCache(keyword: string): Promise<string | null> {
   }
 }
 
-// 实际的爬取函数
+// 实际的数据获取函数（通过 MCP 代理获取）
 async function scrapeHotPosts(keyword: string): Promise<string> {
-  const cookie = getEnvVar('XHS_COOKIE');
-  if (!cookie) {
-    throw new BusinessError(
-      ERROR_MESSAGES.XHS_COOKIE_NOT_CONFIGURED,
-      '小红书数据获取配置错误',
-      '请检查环境变量配置',
-      false
-    );
-  }
-
   try {
-    // 使用正确的小红书API端点
-    const apiUrl = API_ENDPOINTS.XHS_SEARCH;
+    const { summary, notes } = await fetchHotPostsViaMCP(keyword);
 
-    // 分页获取40篇笔记的函数
-    const fetchNotesPage = async (page: number) => {
-      const requestData = {
-        keyword: keyword,
-        page: page,
-        page_size: 20,
-        search_id: generateTraceId(21),
-        sort: "popularity_descending", // 热门排序
-        note_type: 0, // 不限类型
-        ext_flags: [],
-        filters: [
-          {
-            tags: ["popularity_descending"],
-            type: "sort_type"
-          },
-          {
-            tags: ["不限"],
-            type: "filter_note_type"
-          },
-          {
-            tags: ["不限"],
-            type: "filter_note_time"
-          },
-          {
-            tags: ["不限"],
-            type: "filter_note_range"
-          },
-          {
-            tags: ["不限"],
-            type: "filter_pos_distance"
-          }
-        ],
-        geo: "",
-        image_formats: ["jpg", "webp", "avif"]
-      };
-
-      // 创建AbortController用于超时控制
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), CONFIG.REQUEST_TIMEOUT);
-
-      try {
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: {
-            'authority': 'edith.xiaohongshu.com',
-            'accept': 'application/json, text/plain, */*',
-            'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
-            'cache-control': 'no-cache',
-            'content-type': 'application/json;charset=UTF-8',
-            'origin': 'https://www.xiaohongshu.com',
-            'pragma': 'no-cache',
-            'referer': 'https://www.xiaohongshu.com/',
-            'sec-ch-ua': '"Not A(Brand)";v="99", "Microsoft Edge";v="121", "Chromium";v="121"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-site',
-            'user-agent': XHS_CONFIG.USER_AGENT,
-            'x-b3-traceid': generateTraceId(),
-            'cookie': cookie
-          },
-          body: JSON.stringify(requestData),
-          signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-
-        // 检查响应状态（允许4xx和5xx状态码通过，与axios的validateStatus行为一致）
-        if (response.status >= 500) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        // 解析JSON响应
-        const data = await response.json();
-
-        // 返回与axios兼容的响应格式
-        return {
-          status: response.status,
-          data: data
-        };
-      } catch (error) {
-        clearTimeout(timeoutId);
-        if (error instanceof Error && error.name === 'AbortError') {
-          throw new Error('请求超时');
-        }
-        throw error;
-      }
-    };
-
-    // 分页获取笔记
-    let allNotes: XhsNoteItem[] = [];
-    let currentPage = 1;
-    const targetCount = CONFIG.TARGET_NOTES_COUNT;
-
-    while (allNotes.length < targetCount && currentPage <= CONFIG.MAX_PAGES) { // 最多获取指定页数，避免无限循环
-      const response = await fetchNotesPage(currentPage);
-
-      // 检查响应状态
-      if (response.status !== HTTP_STATUS.OK) {
-        throw new Error(`${ERROR_MESSAGES.XHS_API_ERROR}: ${response.status}`);
-      }
-
-      const data: XhsApiResponse = response.data;
-
-      // 添加详细的调试信息
-      if (debugLoggingEnabled) {
-        console.log(`📊 第${currentPage}页API响应状态:`, response.status);
-        console.log(`📊 API响应成功标志:`, data.success);
-        console.log(`📊 API响应消息:`, data.msg);
-        console.log(`📊 返回的items数量:`, data.data?.items?.length || 0);
-      }
-
-      // 检查API响应结构
-      if (!data.success) {
-        throw new Error(`小红书API错误: ${data.msg || '未知错误'}`);
-      }
-
-      if (!data.data || !data.data.items) {
-        throw new Error(ERROR_MESSAGES.XHS_DATA_STRUCTURE_ERROR);
-      }
-
-      // 过滤出笔记类型的内容
-      const pageNotes = data.data.items.filter((item: XhsNoteItem) => item.model_type === "note");
-
-      if (pageNotes.length === 0) {
-        break; // 如果当前页没有笔记，停止获取
-      }
-
-      allNotes = allNotes.concat(pageNotes);
-      currentPage++;
-
-      // 如果API表示没有更多数据，停止获取
-      if (!data.data.has_more) {
-        break;
-      }
-    }
-
-    if (allNotes.length === 0) {
-      throw new Error(ERROR_MESSAGES.NO_NOTES_FOUND);
-    }
-
-    // 取前40篇笔记进行分析 - 根据实际API结构解析
-    const posts: ProcessedNote[] = [];
-
-    for (const item of allNotes.slice(0, targetCount)) {
-      // 优先使用note_card中的数据，如果没有则使用直接字段
-      const noteCard = item.note_card;
-      const title = noteCard?.display_title || noteCard?.title || item.display_title || item.title || '无标题';
-      const desc = noteCard?.desc || item.desc || '无描述';
-      const interactInfo = noteCard?.interact_info || item.interact_info || {
-        liked_count: 0,
-        comment_count: 0,
-        collected_count: 0
-      };
-      const userInfo = noteCard?.user || item.user || { nickname: '未知用户' };
-
-      posts.push({
-        title,
-        desc,
-        interact_info: {
-          liked_count: interactInfo.liked_count || 0,
-          comment_count: interactInfo.comment_count || 0,
-          collected_count: interactInfo.collected_count || 0
-        },
-        note_id: item.id || item.note_id || '',
-        user_info: {
-          nickname: userInfo.nickname || '未知用户'
-        }
-      });
-    }
-
-    // 格式化为字符串
-    let result = `关键词"${keyword}"的热门笔记分析（目标${targetCount}篇，实际获取${posts.length}篇）：\n\n`;
-    posts.forEach((post: ProcessedNote, index: number) => {
-      result += `${index + 1}. 标题：${post.title}\n`;
-      result += `   描述：${post.desc.substring(0, 100)}${post.desc.length > 100 ? '...' : ''}\n`;
-      result += `   互动：点赞${post.interact_info.liked_count} 评论${post.interact_info.comment_count} 收藏${post.interact_info.collected_count}\n`;
-      result += `   作者：${post.user_info.nickname}\n\n`;
-    });
-
-    // 保存到缓存
+    // 保存到缓存（如果启用）
     try {
-      await saveCacheData(keyword, result, posts, 'scraped');
+      await saveCacheData(keyword, summary, notes, 'scraped');
     } catch (cacheError) {
       console.warn('保存缓存失败:', cacheError);
-      // 缓存失败不影响主流程
     }
 
-    return result;
-
+    return summary;
   } catch (error) {
-    console.error('Error fetching hot posts:', error);
-    // 抓取失败直接抛出错误，不使用模拟数据
+    console.error('通过MCP获取热门笔记失败:', error);
     throw new Error(`${ERROR_MESSAGES.FETCH_HOT_POSTS_ERROR}: ${error instanceof Error ? error.message : '未知错误'}`);
   }
 }
