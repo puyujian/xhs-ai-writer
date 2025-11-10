@@ -44,14 +44,99 @@ interface SessionInfo {
 // MCP客户端类
 class MCPClient {
   private requestId = 0;
+  private sessionId: string | null = null;
 
   /**
-   * 调用MCP工具（简化版，直接调用工具）
-   * 
-   * 注意：小红书MCP使用官方SDK的StreamableHTTPHandler，
-   * 该handler会自动管理session生命周期，无需手动初始化。
+   * 初始化MCP会话并获取Session ID
+   */
+  private async initialize(): Promise<string> {
+    const request: MCPRequest = {
+      jsonrpc: '2.0',
+      id: this.requestId++,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: {
+          name: 'xhs-ai-writer',
+          version: '2.2.0',
+        },
+      },
+    };
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), MCP_CONFIG.TIMEOUT);
+
+      const response = await fetch(MCP_CONFIG.URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`MCP初始化失败: HTTP ${response.status}`);
+      }
+
+      // 从响应头获取Session ID
+      const sessionId = response.headers.get('Mcp-Session-Id');
+      if (!sessionId) {
+        throw new Error('MCP服务器未返回Session ID');
+      }
+
+      const data: MCPResponse<SessionInfo> = await response.json();
+
+      if (data.error) {
+        throw new Error(`MCP初始化失败: ${data.error.message}`);
+      }
+
+      // 发送initialized通知
+      await this.sendNotification('notifications/initialized', sessionId);
+
+      console.log('✅ MCP会话初始化成功');
+      return sessionId;
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('MCP初始化超时');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * 发送MCP通知
+   */
+  private async sendNotification(method: string, sessionId: string, params?: Record<string, unknown>): Promise<void> {
+    const notification = {
+      jsonrpc: '2.0',
+      method,
+      params,
+    };
+
+    await fetch(MCP_CONFIG.URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Mcp-Session-Id': sessionId,
+      },
+      body: JSON.stringify(notification),
+    });
+  }
+
+  /**
+   * 调用MCP工具
    */
   private async callTool<T = unknown>(toolName: string, args: Record<string, unknown> = {}): Promise<T> {
+    // 如果没有session ID，先初始化
+    if (!this.sessionId) {
+      this.sessionId = await this.initialize();
+    }
+
     const request: MCPRequest = {
       jsonrpc: '2.0',
       id: this.requestId++,
@@ -70,6 +155,7 @@ class MCPClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Mcp-Session-Id': this.sessionId,
         },
         body: JSON.stringify(request),
         signal: controller.signal,
@@ -125,34 +211,41 @@ class MCPClient {
       const parsedData = JSON.parse(textContent);
       
       // 处理MCP返回的数据，转换为ProcessedNote格式
-      if (parsedData.data && Array.isArray(parsedData.data.items)) {
+      // MCP返回格式: { feeds: [...], count: number }
+      if (parsedData.feeds && Array.isArray(parsedData.feeds)) {
         const notes: ProcessedNote[] = [];
         
-        for (const item of parsedData.data.items) {
+        for (const item of parsedData.feeds) {
           // 过滤出笔记类型的内容
-          if (item.model_type !== 'note') continue;
+          if (item.modelType !== 'note') continue;
 
-          const noteCard = item.note_card || item;
-          const title = noteCard.display_title || noteCard.title || '无标题';
+          const noteCard = item.noteCard || {};
+          const title = noteCard.displayTitle || noteCard.title || '无标题';
           const desc = noteCard.desc || '无描述';
-          const interactInfo = noteCard.interact_info || {
-            liked_count: 0,
-            comment_count: 0,
-            collected_count: 0,
+          const interactInfo = noteCard.interactInfo || {
+            likedCount: '0',
+            commentCount: '0',
+            collectedCount: '0',
           };
           const userInfo = noteCard.user || { nickname: '未知用户' };
+
+          // 将字符串数字转换为数字
+          const parseCount = (count: string | number): number => {
+            if (typeof count === 'number') return count;
+            return parseInt(count.replace(/[^0-9]/g, '') || '0', 10);
+          };
 
           notes.push({
             title,
             desc,
             interact_info: {
-              liked_count: interactInfo.liked_count || 0,
-              comment_count: interactInfo.comment_count || 0,
-              collected_count: interactInfo.collected_count || 0,
+              liked_count: parseCount(interactInfo.likedCount),
+              comment_count: parseCount(interactInfo.commentCount),
+              collected_count: parseCount(interactInfo.collectedCount),
             },
-            note_id: item.id || item.note_id || '',
+            note_id: item.id || '',
             user_info: {
-              nickname: userInfo.nickname || '未知用户',
+              nickname: userInfo.nickname || userInfo.nickName || '未知用户',
             },
           });
         }
