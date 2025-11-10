@@ -50,6 +50,7 @@ class MCPClient {
    * 初始化MCP会话并获取Session ID
    */
   private async initialize(): Promise<string> {
+    console.log('🔄 开始初始化MCP会话...');
     const request: MCPRequest = {
       jsonrpc: '2.0',
       id: this.requestId++,
@@ -68,6 +69,7 @@ class MCPClient {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), MCP_CONFIG.TIMEOUT);
 
+      console.log(`📡 发送初始化请求到: ${MCP_CONFIG.URL}`);
       const response = await fetch(MCP_CONFIG.URL, {
         method: 'POST',
         headers: {
@@ -85,6 +87,8 @@ class MCPClient {
 
       // 从响应头获取Session ID
       const sessionId = response.headers.get('Mcp-Session-Id');
+      console.log(`🔑 获取到Session ID: ${sessionId ? sessionId.substring(0, 10) + '...' : 'null'}`);
+      
       if (!sessionId) {
         throw new Error('MCP服务器未返回Session ID');
       }
@@ -96,11 +100,16 @@ class MCPClient {
       }
 
       // 发送initialized通知
+      console.log('📨 发送initialized通知...');
       await this.sendNotification('notifications/initialized', sessionId);
+
+      // 等待一小段时间确保服务器处理完初始化
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       console.log('✅ MCP会话初始化成功');
       return sessionId;
     } catch (error) {
+      console.error('❌ MCP初始化失败:', error);
       if (error instanceof Error && error.name === 'AbortError') {
         throw new Error('MCP初始化超时');
       }
@@ -118,7 +127,7 @@ class MCPClient {
       params,
     };
 
-    await fetch(MCP_CONFIG.URL, {
+    const response = await fetch(MCP_CONFIG.URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -126,64 +135,83 @@ class MCPClient {
       },
       body: JSON.stringify(notification),
     });
+
+    if (!response.ok) {
+      throw new Error(`MCP通知发送失败: HTTP ${response.status}`);
+    }
   }
 
   /**
    * 调用MCP工具
    */
   private async callTool<T = unknown>(toolName: string, args: Record<string, unknown> = {}): Promise<T> {
-    // 如果没有session ID，先初始化
-    if (!this.sessionId) {
-      this.sessionId = await this.initialize();
-    }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (!this.sessionId) {
+        this.sessionId = await this.initialize();
+      }
 
-    const request: MCPRequest = {
-      jsonrpc: '2.0',
-      id: this.requestId++,
-      method: 'tools/call',
-      params: {
-        name: toolName,
-        arguments: args,
-      },
-    };
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), MCP_CONFIG.TIMEOUT);
-
-      const response = await fetch(MCP_CONFIG.URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Mcp-Session-Id': this.sessionId,
+      const request: MCPRequest = {
+        jsonrpc: '2.0',
+        id: this.requestId++,
+        method: 'tools/call',
+        params: {
+          name: toolName,
+          arguments: args,
         },
-        body: JSON.stringify(request),
-        signal: controller.signal,
-      });
+      };
 
-      clearTimeout(timeoutId);
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), MCP_CONFIG.TIMEOUT);
 
-      if (!response.ok) {
-        throw new Error(`MCP请求失败: HTTP ${response.status}`);
+        const response = await fetch(MCP_CONFIG.URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Mcp-Session-Id': this.sessionId,
+          },
+          body: JSON.stringify(request),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`MCP请求失败: HTTP ${response.status}`);
+        }
+
+        const data: MCPResponse<T> = await response.json();
+
+        if (data.error) {
+          const message = data.error.message || 'Unknown error';
+          console.warn(`⚠️ MCP工具调用返回错误: ${message}`);
+          if (message.includes('invalid during session initialization')) {
+            console.warn('🔁 MCP会话可能失效，准备重新初始化...');
+            this.sessionId = null;
+            continue;
+          }
+          throw new Error(`MCP工具调用失败: ${message}`);
+        }
+
+        if (!data.result) {
+          throw new Error('MCP返回结果为空');
+        }
+
+        return data.result;
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new Error('MCP请求超时');
+        }
+        if (error instanceof Error && error.message.includes('invalid during session initialization')) {
+          console.warn('⚠️ MCP会话未完成初始化，将重新初始化后重试...');
+          this.sessionId = null;
+          continue;
+        }
+        throw error;
       }
-
-      const data: MCPResponse<T> = await response.json();
-
-      if (data.error) {
-        throw new Error(`MCP工具调用失败: ${data.error.message}`);
-      }
-
-      if (!data.result) {
-        throw new Error('MCP返回结果为空');
-      }
-
-      return data.result;
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error('MCP请求超时');
-      }
-      throw error;
     }
+
+    throw new Error('MCP请求失败: 无法完成会话初始化');
   }
 
   /**
