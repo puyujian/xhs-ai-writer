@@ -7,10 +7,25 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { ProcessedNote } from './types';
 
+const DEFAULT_CACHE_DIR = path.join(process.cwd(), 'data', 'cache');
+
+function resolveCacheDir(): string {
+  if (process.env.CACHE_DIR) {
+    return process.env.CACHE_DIR;
+  }
+
+  const isServerless = process.env.VERCEL === '1' || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+  if (isServerless) {
+    return path.join('/tmp', 'cache');
+  }
+
+  return DEFAULT_CACHE_DIR;
+}
+
 // 缓存配置
 export const CACHE_CONFIG = {
-  // 缓存目录
-  CACHE_DIR: path.join(process.cwd(), 'data', 'cache'),
+  // 缓存目录 - 在无服务器环境如 Vercel 使用 /tmp，其他环境使用项目内目录
+  CACHE_DIR: resolveCacheDir(),
   // 缓存有效期（小时）
   CACHE_EXPIRY_HOURS: 6,
   // 最大缓存文件数量
