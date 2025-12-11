@@ -1,10 +1,9 @@
-import { getAnalysisPrompt, getGenerationPrompt } from '@/lib/prompts';
+import { getGenerationPrompt } from '@/lib/prompts';
 import { ERROR_MESSAGES, HTTP_STATUS, CONFIG } from '@/lib/constants';
 import { aiManager } from '@/lib/ai-manager';
 import { filterSensitiveContent, detectSensitiveWords } from '@/lib/sensitive-words';
 import { sanitizeText } from '@/lib/utils';
 import { getCacheData, saveCacheData, getFallbackCacheData } from '@/lib/cache-manager';
-import { BusinessError } from '@/lib/error-handler';
 import { fetchHotPostsViaMCP } from '@/lib/mcp-client';
 
 // 调试日志控制
@@ -55,13 +54,9 @@ async function fetchHotPostsWithCache(keyword: string): Promise<string | null> {
       return fallbackData.data;
     }
 
-    // 4. 所有方案都失败，抛出错误
-    throw new BusinessError(
-      `${ERROR_MESSAGES.FETCH_HOT_POSTS_ERROR}: 无法获取数据且无可用缓存`,
-      '获取热门数据失败',
-      '请稍后重试，如果问题持续请联系支持',
-      true
-    );
+    // 4. 所有方案都失败，降级到无数据模式（而非抛出错误）
+    console.warn(`⚠️ 所有数据获取方式都失败，降级到无数据模式继续生成`);
+    return null;
   }
 }
 
