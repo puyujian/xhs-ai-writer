@@ -45,8 +45,14 @@ export const CONFIG = {
   TYPEWRITER_INTERVAL: 30, // 打字机效果间隔(ms)
   // 缓存配置
   CACHE_EXPIRY_HOURS: 24, // 缓存过期时间
-  // 请求超时配置
-  REQUEST_TIMEOUT: 15000, // 15秒请求超时
+  // 请求超时配置（优化版 - 适配 Vercel 180s 限制）
+  REQUEST_TIMEOUT: 15000, // 15秒通用请求超时
+  AI_REQUEST_TIMEOUT: 90000, // 90秒 AI 请求超时（单次请求）
+  AI_STREAM_TIMEOUT: 120000, // 120秒 AI 流式生成超时
+  MCP_REQUEST_TIMEOUT: 20000, // 20秒 MCP 请求超时（从30秒降低）
+  MCP_HEALTH_CHECK_TIMEOUT: 3000, // 3秒 MCP 健康检查超时（从5秒降低）
+  // Vercel 函数总超时预留（留 10 秒缓冲）
+  VERCEL_SAFE_TIMEOUT: 170000, // 170秒，预留 10 秒给清理工作
 } as const;
 
 // HTTP状态码

@@ -6,7 +6,7 @@
 import { ProcessedNote } from './types';
 import { CONFIG } from './constants';
 
-// MCP配置
+// MCP配置（优化版 - 适配 Vercel 180s 限制）
 const MCP_CONFIG = {
   // MCP服务地址列表，支持多个地址轮询（逗号分隔）
   // 示例: "http://server1:18060/mcp,http://server2:18060/mcp"
@@ -14,12 +14,14 @@ const MCP_CONFIG = {
     .split(',')
     .map(url => url.trim())
     .filter(url => url.length > 0),
-  // 请求超时时间（增加到30秒，适应网络延迟）
-  TIMEOUT: 30000,
-  // 每个地址的重试次数
-  MAX_RETRIES_PER_URL: 2,
-  // 重试延迟（毫秒）
-  RETRY_DELAY: 1000,
+  // 请求超时时间（从30秒降低到20秒，减少总等待时间）
+  TIMEOUT: CONFIG.MCP_REQUEST_TIMEOUT || 20000,
+  // 健康检查超时（从5秒降低到3秒）
+  HEALTH_CHECK_TIMEOUT: CONFIG.MCP_HEALTH_CHECK_TIMEOUT || 3000,
+  // 每个地址的重试次数（从2次降低到1次）
+  MAX_RETRIES_PER_URL: 1,
+  // 重试延迟（从1000ms降低到500ms）
+  RETRY_DELAY: 500,
 };
 
 // MCP JSON-RPC 请求接口
@@ -93,7 +95,7 @@ class MCPClient {
     try {
       console.log(`🏥 执行MCP健康检查: ${url}`);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒快速检查
+      const timeoutId = setTimeout(() => controller.abort(), MCP_CONFIG.HEALTH_CHECK_TIMEOUT); // 使用配置的超时时间
 
       const response = await fetch(url, {
         method: 'POST',
@@ -219,7 +221,7 @@ class MCPClient {
   }
 
   /**
-   * 发送MCP通知
+   * 发送MCP通知（带超时控制）
    */
   private async sendNotification(method: string, sessionId: string, params?: Record<string, unknown>): Promise<void> {
     const notification = {
@@ -229,17 +231,31 @@ class MCPClient {
     };
 
     const currentUrl = this.getCurrentUrl();
-    const response = await fetch(currentUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Mcp-Session-Id': sessionId,
-      },
-      body: JSON.stringify(notification),
-    });
+    const controller = new AbortController();
+    // 通知超时设置为健康检查超时的 2 倍，因为通知通常很快
+    const timeoutId = setTimeout(() => controller.abort(), MCP_CONFIG.HEALTH_CHECK_TIMEOUT * 2);
 
-    if (!response.ok) {
-      throw new Error(`MCP通知发送失败: HTTP ${response.status}`);
+    try {
+      const response = await fetch(currentUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Mcp-Session-Id': sessionId,
+        },
+        body: JSON.stringify(notification),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`MCP通知发送失败: HTTP ${response.status}`);
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('MCP通知发送超时');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 

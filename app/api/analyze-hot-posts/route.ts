@@ -99,7 +99,7 @@ async function scrapeHotPosts(keyword: string): Promise<string> {
 
       // 创建AbortController用于超时控制
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const timeoutId = setTimeout(() => controller.abort(), CONFIG.REQUEST_TIMEOUT);
 
       try {
         const response = await fetch(apiUrl, {
@@ -281,6 +281,10 @@ async function scrapeHotPosts(keyword: string): Promise<string> {
 
 
 export async function POST(request: Request) {
+  // 记录请求开始时间，用于计算剩余执行时间
+  const requestStartTime = Date.now();
+  const getRemainingBudget = () => CONFIG.VERCEL_SAFE_TIMEOUT - (Date.now() - requestStartTime);
+
   try {
     const { keyword } = await request.json();
 
@@ -311,9 +315,16 @@ export async function POST(request: Request) {
     const analysisPrompt = getAnalysisPrompt(safeContent);
 
     // 使用AI管理器进行分析（带重试机制）
+    // 传入剩余执行时间预算，确保不超过 Vercel 限制
+    const remainingForAI = getRemainingBudget();
+    if (debugLoggingEnabled) {
+      console.log(`⏱️ AI 分析剩余时间预算: ${Math.round(remainingForAI / 1000)}s`);
+    }
+
     const analysisResult = await aiManager.analyzeWithRetry(
       analysisPrompt,
-      ['titleFormulas', 'contentStructure', 'tagStrategy', 'coverStyleAnalysis']
+      ['titleFormulas', 'contentStructure', 'tagStrategy', 'coverStyleAnalysis'],
+      remainingForAI
     );
 
     return createApiResponse({

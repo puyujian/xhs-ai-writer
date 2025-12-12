@@ -129,6 +129,10 @@ function createPromptWithoutReference(user_info: string, keyword: string): strin
 }
 
 export async function POST(request: Request) {
+  // 记录请求开始时间，用于计算剩余执行时间
+  const requestStartTime = Date.now();
+  const getRemainingBudget = () => CONFIG.VERCEL_SAFE_TIMEOUT - (Date.now() - requestStartTime);
+
   try {
     const { keyword, user_info } = await request.json();
 
@@ -166,6 +170,12 @@ export async function POST(request: Request) {
         let accumulatedContent = ""; // 累积内容，用于检测开始标记
 
         // 使用AI管理器的流式生成（带重试机制）
+        // 传入剩余执行时间预算，确保不超过 Vercel 限制
+        const remainingForAI = getRemainingBudget();
+        if (debugLoggingEnabled) {
+          console.log(`⏱️ AI 流式生成剩余时间预算: ${Math.round(remainingForAI / 1000)}s`);
+        }
+
         await aiManager.generateStreamWithRetry(
           combinedPrompt,
           // onChunk: 处理每个内容块
@@ -222,7 +232,9 @@ export async function POST(request: Request) {
             console.error('Stream error:', error);
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
             controller.close();
-          }
+          },
+          // 传入剩余执行时间预算
+          remainingForAI
         );
 
         // 生成完成

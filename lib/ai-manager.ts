@@ -32,13 +32,15 @@ interface RetryConfig {
 
 /**
  * AI客户端管理器
+ * 优化版：添加请求超时控制，适配 Vercel 180s 限制
  */
 export class AIManager {
   private client: OpenAI | null = null;
+  // 优化重试配置：减少重试次数和延迟，避免超时
   private retryConfig: RetryConfig = {
-    maxRetries: 2,
-    baseDelay: 1000,
-    maxDelay: 10000,
+    maxRetries: 1, // 从 2 次降低到 1 次，减少总等待时间
+    baseDelay: 500, // 从 1000ms 降低到 500ms
+    maxDelay: 3000, // 从 10000ms 降低到 3000ms
     backoffMultiplier: 2
   };
 
@@ -52,12 +54,13 @@ export class AIManager {
 
   /**
    * 获取AI客户端实例
+   * 优化：添加请求超时配置
    */
   private getClient(): OpenAI {
     if (!this.client) {
       const apiUrl = getEnvVar('THIRD_PARTY_API_URL');
       const apiKey = getEnvVar('THIRD_PARTY_API_KEY');
-      
+
       if (!apiUrl || !apiKey) {
         throw new BusinessError(
           'AI服务配置不完整',
@@ -66,13 +69,17 @@ export class AIManager {
           false
         );
       }
-      
+
       this.client = new OpenAI({
         baseURL: apiUrl,
         apiKey: apiKey,
+        // 默认超时设置为流式超时（较大值），具体请求会在调用时显式覆盖
+        // 这样可以确保流式请求不会被默认超时截断
+        timeout: CONFIG.AI_STREAM_TIMEOUT, // 120秒，由每次请求显式控制
+        maxRetries: 0, // 禁用 OpenAI SDK 内置重试，使用我们自己的重试逻辑
       });
     }
-    
+
     return this.client;
   }
 
@@ -272,13 +279,19 @@ export class AIManager {
 
   /**
    * 带重试的AI分析调用（支持多模型降级）
+   * @param prompt 提示词
+   * @param expectedFields 期望的响应字段
+   * @param overallTimeoutMs 整体超时时间（毫秒），用于动态控制剩余执行时间
    */
   async analyzeWithRetry(
     prompt: string,
-    expectedFields: string[] = ['titleFormulas', 'contentStructure', 'tagStrategy', 'coverStyleAnalysis']
+    expectedFields: string[] = ['titleFormulas', 'contentStructure', 'tagStrategy', 'coverStyleAnalysis'],
+    overallTimeoutMs: number = CONFIG.VERCEL_SAFE_TIMEOUT
   ): Promise<any> {
     const modelList = this.getModelList();
     let lastError: Error | null = null;
+    const startTime = Date.now();
+    const getRemainingTime = () => overallTimeoutMs - (Date.now() - startTime);
 
     // 遍历所有可用模型
     for (let modelIndex = 0; modelIndex < modelList.length; modelIndex++) {
@@ -286,9 +299,19 @@ export class AIManager {
 
       // 对每个模型进行重试
       for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
+        // 检查剩余时间
+        const remainingTime = getRemainingTime();
+        if (remainingTime <= 5000) { // 预留 5 秒缓冲
+          lastError = new Error('AI分析已超过剩余执行时间');
+          if (debugLoggingEnabled) {
+            console.warn(`⏱️ 剩余时间不足 (${remainingTime}ms)，停止重试`);
+          }
+          break;
+        }
+
         try {
           if (debugLoggingEnabled) {
-            console.log(`🤖 AI分析尝试 ${attempt + 1}/${this.retryConfig.maxRetries + 1} (模型: ${currentModel})`);
+            console.log(`🤖 AI分析尝试 ${attempt + 1}/${this.retryConfig.maxRetries + 1} (模型: ${currentModel}, 剩余: ${Math.round(remainingTime / 1000)}s)`);
           }
 
           const client = this.getClient();
@@ -307,7 +330,9 @@ export class AIManager {
           }
           // 注意：不设置max_tokens，让模型自然生成完整响应
 
-          const response = await client.chat.completions.create(requestParams);
+          // 动态计算请求超时：取配置超时和剩余时间的较小值
+          const requestTimeout = Math.min(CONFIG.AI_REQUEST_TIMEOUT, remainingTime - 2000);
+          const response = await client.chat.completions.create(requestParams, { timeout: requestTimeout });
 
           // [核心修复] 增加对 response.choices 的有效性检查
           if (!response || !response.choices || response.choices.length === 0) {
@@ -369,6 +394,14 @@ export class AIManager {
         }
       }
 
+      // 检查剩余时间，如果不足则不再切换模型
+      if (getRemainingTime() <= 5000) {
+        if (debugLoggingEnabled) {
+          console.warn(`⏱️ 剩余时间不足，停止模型切换`);
+        }
+        break;
+      }
+
       // 当前模型的所有重试都失败了，尝试下一个模型
       if (modelIndex < modelList.length - 1) {
         if (debugLoggingEnabled) {
@@ -388,14 +421,21 @@ export class AIManager {
 
   /**
    * 带重试的流式生成调用（支持多模型降级）
+   * @param prompt 提示词
+   * @param onChunk 内容块回调
+   * @param onError 错误回调
+   * @param overallTimeoutMs 整体超时时间（毫秒），用于动态控制剩余执行时间
    */
   async generateStreamWithRetry(
     prompt: string,
     onChunk: (content: string) => void,
-    onError: (error: Error) => void
+    onError: (error: Error) => void,
+    overallTimeoutMs: number = CONFIG.VERCEL_SAFE_TIMEOUT
   ): Promise<void> {
     const modelList = this.getModelList();
     let lastError: Error | null = null;
+    const startTime = Date.now();
+    const getRemainingTime = () => overallTimeoutMs - (Date.now() - startTime);
 
     // 遍历所有可用模型
     for (let modelIndex = 0; modelIndex < modelList.length; modelIndex++) {
@@ -403,23 +443,45 @@ export class AIManager {
 
       // 对每个模型进行重试
       for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
+        // 检查剩余时间
+        const remainingTime = getRemainingTime();
+        if (remainingTime <= 5000) {
+          lastError = new Error('流式生成已超过剩余执行时间');
+          if (debugLoggingEnabled) {
+            console.warn(`⏱️ 剩余时间不足 (${remainingTime}ms)，停止重试`);
+          }
+          break;
+        }
         try {
           if (debugLoggingEnabled) {
-            console.log(`🤖 流式生成尝试 ${attempt + 1}/${this.retryConfig.maxRetries + 1} (模型: ${currentModel})`);
+            console.log(`🤖 流式生成尝试 ${attempt + 1}/${this.retryConfig.maxRetries + 1} (模型: ${currentModel}, 剩余: ${Math.round(remainingTime / 1000)}s)`);
           }
 
           const client = this.getClient();
-          const response = await client.chat.completions.create({
-            model: currentModel,
-            messages: [{ role: "user", content: prompt }],
-            stream: true,
-            temperature: CONFIG.TEMPERATURE,
-          });
+          // 动态计算请求超时：取配置超时和剩余时间的较小值
+          const requestTimeout = Math.min(CONFIG.AI_STREAM_TIMEOUT, remainingTime - 2000);
+          const response = await client.chat.completions.create(
+            {
+              model: currentModel,
+              messages: [{ role: "user", content: prompt }],
+              stream: true,
+              temperature: CONFIG.TEMPERATURE,
+            },
+            { timeout: requestTimeout }
+          );
 
         let hasContent = false;
         let lastChunkTime = Date.now();
 
         for await (const chunk of response) {
+          // 检查剩余时间，防止流式生成超时
+          if (getRemainingTime() <= 2000) {
+            if (debugLoggingEnabled) {
+              console.warn(`⏱️ 流式生成剩余时间不足，提前结束`);
+            }
+            break;
+          }
+
           // [核心修复] 增加对 chunk.choices 的有效性检查
           if (!chunk || !chunk.choices || chunk.choices.length === 0) {
             if (debugLoggingEnabled) {
@@ -468,6 +530,14 @@ export class AIManager {
             await this.delay(delayMs);
           }
         }
+      }
+
+      // 检查剩余时间，如果不足则不再切换模型
+      if (getRemainingTime() <= 5000) {
+        if (debugLoggingEnabled) {
+          console.warn(`⏱️ 剩余时间不足，停止模型切换`);
+        }
+        break;
       }
 
       // 当前模型的所有重试都失败了，尝试下一个模型
