@@ -3,6 +3,8 @@
  * 简化提示词,依赖模型自身能力,只保留格式要求
  */
 
+import type { GenerationStyleConfig } from './generation-variants';
+
 /**
  * 转义可能破坏提示词结构的特殊字符
  */
@@ -85,9 +87,37 @@ ${safeContent}
 export const getGenerationPrompt = (
   hotPostRules: string,
   userInfo: string,
-  keyword: string
+  keyword: string,
+  styleConfig: GenerationStyleConfig
 ): string => {
+  const { variant, opening, ending, depthModules, nonce } = styleConfig;
+
+  const depthText = depthModules.map(m => `- ${m}`).join('\n');
+  const structureText = variant.structure.map(s => `- ${s}`).join('\n');
+  const styleRulesText = variant.styleRules.map(r => `- ${r}`).join('\n');
+
+  const emojiHint =
+    variant.emojiDensity === 'high'
+      ? '正文建议 4-10 个，标题每个 0-1 个；不要每句都加。'
+      : variant.emojiDensity === 'medium'
+        ? '正文建议 2-6 个，标题可偶尔点缀；不要堆表情。'
+        : '正文建议 0-2 个，少量点缀即可。';
+
   return `你是小红书爆款博主,基于用户素材创作一篇高质量笔记。
+
+**本次写作配置(仅用于控制风格,禁止在输出中提及):**
+- 角度: ${variant.angle}
+- 人设: ${variant.persona}
+- 开头方式: ${opening}
+- 结构骨架:
+${structureText}
+- 额外风格规则:
+${styleRulesText}
+- 深度加强(能从素材里找到就写,找不到就不写):
+${depthText}
+- 收尾方式: ${ending}
+- emoji密度: ${variant.emojiDensity} (${emojiHint})
+- 随机扰动码: ${nonce} (严禁输出)
 
 **爆款规律(内化后使用,不要输出):**
 ${hotPostRules}
@@ -109,6 +139,8 @@ ${userInfo}
 - 多用短句、emoji
 - 加入真实细节和情绪
 - 避免:首先、其次、总之等模板词
+- 避免这些高频开头套话: 今天来分享、给大家安利、姐妹们听我说、宝子们
+- 标题与正文都要尽量避免“同一套句式重复”,多换表达方式
 
 **格式禁令（严格执行）:**
 - ❌ 禁止使用 Markdown 语法

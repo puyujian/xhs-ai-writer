@@ -41,3 +41,4 @@ next-env.d.ts
 
 # MCP workflow
 .spec-workflow/
+.ace-tool/

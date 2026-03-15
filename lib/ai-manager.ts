@@ -31,6 +31,13 @@ interface RetryConfig {
 }
 
 /**
+ * AI调用可选参数（用于降低同质化、按场景调参）
+ */
+interface AICallOptions {
+  temperature?: number;
+}
+
+/**
  * AI客户端管理器
  * 优化版：添加请求超时控制，适配 Vercel 180s 限制
  */
@@ -286,7 +293,8 @@ export class AIManager {
   async analyzeWithRetry(
     prompt: string,
     expectedFields: string[] = ['titleFormulas', 'contentStructure', 'tagStrategy', 'coverStyleAnalysis'],
-    overallTimeoutMs: number = CONFIG.VERCEL_SAFE_TIMEOUT
+    overallTimeoutMs: number = CONFIG.VERCEL_SAFE_TIMEOUT,
+    options: AICallOptions = {}
   ): Promise<any> {
     const modelList = this.getModelList();
     let lastError: Error | null = null;
@@ -317,10 +325,15 @@ export class AIManager {
           const client = this.getClient();
 
           // 为Gemini模型调整请求参数
+          // 分析任务更偏“结构化/稳定”，默认温度更低
+          const temperature = typeof options.temperature === 'number'
+            ? options.temperature
+            : (CONFIG.ANALYSIS_TEMPERATURE ?? CONFIG.TEMPERATURE);
+
           const requestParams: any = {
             model: currentModel,
             messages: [{ role: "user", content: prompt }],
-            temperature: CONFIG.TEMPERATURE,
+            temperature,
           };
 
           // 只有在非Gemini模型时才使用response_format
@@ -430,7 +443,8 @@ export class AIManager {
     prompt: string,
     onChunk: (content: string) => void,
     onError: (error: Error) => void,
-    overallTimeoutMs: number = CONFIG.VERCEL_SAFE_TIMEOUT
+    overallTimeoutMs: number = CONFIG.VERCEL_SAFE_TIMEOUT,
+    options: AICallOptions = {}
   ): Promise<void> {
     const modelList = this.getModelList();
     let lastError: Error | null = null;
@@ -460,12 +474,16 @@ export class AIManager {
           const client = this.getClient();
           // 动态计算请求超时：取配置超时和剩余时间的较小值
           const requestTimeout = Math.min(CONFIG.AI_STREAM_TIMEOUT, remainingTime - 2000);
+          // 生成任务更偏“内容多样性”，默认允许更高温度，必要时由调用方覆盖
+          const temperature = typeof options.temperature === 'number'
+            ? options.temperature
+            : CONFIG.TEMPERATURE;
           const response = await client.chat.completions.create(
             {
               model: currentModel,
               messages: [{ role: "user", content: prompt }],
               stream: true,
-              temperature: CONFIG.TEMPERATURE,
+              temperature,
             },
             { timeout: requestTimeout }
           );

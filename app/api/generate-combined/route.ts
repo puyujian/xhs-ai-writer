@@ -3,8 +3,9 @@ import { ERROR_MESSAGES, HTTP_STATUS, CONFIG } from '@/lib/constants';
 import { aiManager } from '@/lib/ai-manager';
 import { filterSensitiveContent, detectSensitiveWords } from '@/lib/sensitive-words';
 import { sanitizeText } from '@/lib/utils';
-import { getCacheData, saveCacheData, getFallbackCacheData } from '@/lib/cache-manager';
+import { getCacheData, saveCacheData } from '@/lib/cache-manager';
 import { fetchHotPostsViaMCP } from '@/lib/mcp-client';
+import { createRandomGenerationStyleConfig } from '@/lib/generation-variants';
 
 // 调试日志控制
 const debugLoggingEnabled = process.env.ENABLE_DEBUG_LOGGING === 'true';
@@ -45,16 +46,7 @@ async function fetchHotPostsWithCache(keyword: string): Promise<string | null> {
   } catch (scrapeError) {
     console.warn(`⚠️ 爬取失败: ${scrapeError instanceof Error ? scrapeError.message : '未知错误'}`);
 
-    // 3. 爬取失败，尝试使用同分类的备用缓存
-    const fallbackData = await getFallbackCacheData(keyword);
-    if (fallbackData) {
-      if (debugLoggingEnabled) {
-        console.log(`🔄 使用备用缓存: ${fallbackData.keyword} -> ${keyword}`);
-      }
-      return fallbackData.data;
-    }
-
-    // 4. 所有方案都失败，降级到无数据模式（而非抛出错误）
+    // 爬取失败：直接降级到无数据模式继续生成（避免同分类fallback导致的同质化/错配）
     console.warn(`⚠️ 所有数据获取方式都失败，降级到无数据模式继续生成`);
     return null;
   }
@@ -80,7 +72,12 @@ async function scrapeHotPosts(keyword: string): Promise<string> {
 }
 
 // 创建带参考数据的提示词（当有小红书热门笔记数据时）
-function createPromptWithReference(scrapedContent: string, user_info: string, keyword: string): string {
+function createPromptWithReference(
+  scrapedContent: string,
+  user_info: string,
+  keyword: string,
+  styleConfig: ReturnType<typeof createRandomGenerationStyleConfig>
+): string {
   // 简化内容处理，只处理可能破坏提示词结构的字符
   let safeContent = scrapedContent
     .replace(/```/g, '´´´')  // 转义代码块标记，防止破坏Markdown结构
@@ -104,14 +101,18 @@ ${safeContent}
 
 **内化要求：**
 请默默阅读并提取爆款规律（标题公式、内容结构、标签策略等），将其转化为你的创作直觉，但绝对不要在输出中体现任何分析过程。
-`;
+  `;
 
   // 使用统一的生成提示词函数，确保策略完全一致
-  return getGenerationPrompt(hotPostRules, user_info, keyword);
+  return getGenerationPrompt(hotPostRules, user_info, keyword, styleConfig);
 }
 
 // 创建不带参考数据的提示词（当爬取功能被禁用时）
-function createPromptWithoutReference(user_info: string, keyword: string): string {
+function createPromptWithoutReference(
+  user_info: string,
+  keyword: string,
+  styleConfig: ReturnType<typeof createRandomGenerationStyleConfig>
+): string {
   // 构建一个说明性的"规律"部分，告知 AI 没有参考数据
   const hotPostRules = `
 **【创作说明】**
@@ -122,10 +123,10 @@ function createPromptWithoutReference(user_info: string, keyword: string): strin
 - 没有具体的热门笔记数据可供分析
 - 请依靠你对小红书平台特点和爆款规律的内在理解进行创作
 - 仍需严格遵守所有降低 AIGC 检测率的策略
-`;
+  `;
 
   // 使用完全相同的生成提示词函数，确保 AI 处理策略一致
-  return getGenerationPrompt(hotPostRules, user_info, keyword);
+  return getGenerationPrompt(hotPostRules, user_info, keyword, styleConfig);
 }
 
 export async function POST(request: Request) {
@@ -148,16 +149,20 @@ export async function POST(request: Request) {
       console.log('📝 user_info 前100字符:', user_info?.substring(0, 100) || '空');
     }
 
+    // 为本次请求生成“随机写作配置”，用于降低同质化（同一关键词也会不同写法）
+    const styleConfig = createRandomGenerationStyleConfig();
+
     // 第一步：获取热门笔记数据（如果爬取功能启用）
     const scrapedContent = await fetchHotPostsWithCache(keyword);
 
     // 第二步：根据是否有参考数据，创建不同的提示词
     const combinedPrompt = scrapedContent
-      ? createPromptWithReference(scrapedContent, user_info, keyword)
-      : createPromptWithoutReference(user_info, keyword);
+      ? createPromptWithReference(scrapedContent, user_info, keyword, styleConfig)
+      : createPromptWithoutReference(user_info, keyword, styleConfig);
 
     if (debugLoggingEnabled) {
       console.log(`📝 使用${scrapedContent ? '有参考数据' : '无参考数据'}模式生成内容`);
+      console.log(`🎛️ 写作变体: ${styleConfig.variant.id} (${styleConfig.variant.label})`);
     }
 
     // 创建流式响应
@@ -174,6 +179,15 @@ export async function POST(request: Request) {
         const remainingForAI = getRemainingBudget();
         if (debugLoggingEnabled) {
           console.log(`⏱️ AI 流式生成剩余时间预算: ${Math.round(remainingForAI / 1000)}s`);
+        }
+
+        // 生成温度做随机抖动：在不改变“基于素材”的前提下，提升表达多样性
+        const genTemperature =
+          CONFIG.GEN_TEMPERATURE_MIN +
+          Math.random() * (CONFIG.GEN_TEMPERATURE_MAX - CONFIG.GEN_TEMPERATURE_MIN);
+
+        if (debugLoggingEnabled) {
+          console.log(`🌡️ 本次生成温度: ${genTemperature.toFixed(2)}`);
         }
 
         await aiManager.generateStreamWithRetry(
@@ -234,7 +248,8 @@ export async function POST(request: Request) {
             controller.close();
           },
           // 传入剩余执行时间预算
-          remainingForAI
+          remainingForAI,
+          { temperature: genTemperature }
         );
 
         // 生成完成
