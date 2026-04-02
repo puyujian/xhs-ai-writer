@@ -95,8 +95,8 @@ const VARIANTS: GenerationVariant[] = [
       '回答里必须出现来自素材的具体信息（没有就不写该问题）。'
     ],
     endingOptions: [
-      '收尾一句：你更想我展开哪一段？',
-      '收尾一句：如果你给我更多细节，我还能帮你更精准一点。'
+      '收尾一句：你们平时遇到这种情况一般怎么处理？',
+      '收尾一句：有试过的姐妹来说说你们的体验呗。'
     ],
     emojiDensity: 'low'
   },
@@ -265,7 +265,7 @@ const VARIANTS: GenerationVariant[] = [
     ],
     endingOptions: [
       '结尾一句：你更像哪一种情况？',
-      '结尾一句：如果你愿意补充细节，我可以帮你把分支写得更准。'
+      '结尾一句：评论区说说你的情况，一起讨论。'
     ],
     emojiDensity: 'low'
   },
