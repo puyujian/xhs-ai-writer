@@ -169,6 +169,19 @@ export async function POST(request: Request) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
+        let streamClosed = false;
+        const enqueueSse = (payload: string) => {
+          if (!streamClosed) {
+            controller.enqueue(encoder.encode(payload));
+          }
+        };
+        const closeStream = () => {
+          if (!streamClosed) {
+            streamClosed = true;
+            controller.close();
+          }
+        };
+
         // 内容清洗标志位
         let contentStarted = false;
         const startMarker = "## 1."; // 从第1部分开始，现在直接是标题创作
@@ -238,14 +251,14 @@ export async function POST(request: Request) {
               }
 
               // 4. 发送处理后的内容
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: chunkToSend })}\n\n`));
+              enqueueSse(`data: ${JSON.stringify({ content: chunkToSend })}\n\n`);
             }
           },
           // onError: 处理错误
           (error: Error) => {
             console.error('Stream error:', error);
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
-            controller.close();
+            enqueueSse(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+            closeStream();
           },
           // 传入剩余执行时间预算
           remainingForAI,
@@ -253,8 +266,10 @@ export async function POST(request: Request) {
         );
 
         // 生成完成
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-        controller.close();
+        if (!streamClosed) {
+          enqueueSse('data: [DONE]\n\n');
+          closeStream();
+        }
       }
     });
 

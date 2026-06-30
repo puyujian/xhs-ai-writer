@@ -321,6 +321,9 @@ function GeneratePageContent() {
 
         if (reader) {
           try {
+            let sseBuffer = '';
+            let receivedAnyContent = false;
+
             while (true) {
               // 检查是否被中止
               if (currentController.signal.aborted) {
@@ -331,12 +334,13 @@ function GeneratePageContent() {
               const { done, value } = await reader.read();
               if (done) break;
 
-              const chunk = decoder.decode(value);
-              const lines = chunk.split('\n');
+              sseBuffer += decoder.decode(value, { stream: true });
+              const lines = sseBuffer.split('\n');
+              sseBuffer = lines.pop() || '';
 
               for (const line of lines) {
                 if (line.startsWith('data: ')) {
-                  const data = line.slice(6);
+                  const data = line.slice(6).trimEnd();
                   if (data === '[DONE]') {
                     // 生成完成
                     setLoading(false);
@@ -344,20 +348,31 @@ function GeneratePageContent() {
                     return;
                   }
 
+                  let parsed: { content?: string; error?: string };
                   try {
-                    const parsed = JSON.parse(data);
-                    if (parsed.content) {
-                      // 立即追加内容到显示区域，实现真正的流式输出
-                      setDisplayContent(prev => prev + parsed.content);
-                    } else if (parsed.error) {
-                      throw new Error(parsed.error);
-                    }
+                    parsed = JSON.parse(data);
                   } catch (parseError) {
                     console.warn('解析错误:', parseError);
-                    // 忽略解析错误，继续处理下一行
+                    // 忽略异常数据行，继续处理下一行
+                    continue;
+                  }
+
+                  if (parsed.content) {
+                    receivedAnyContent = true;
+                    // 立即追加内容到显示区域，实现真正的流式输出
+                    setDisplayContent(prev => prev + parsed.content);
+                  } else if (parsed.error) {
+                    throw new Error(parsed.error);
                   }
                 }
               }
+            }
+
+            if (receivedAnyContent) {
+              setLoading(false);
+              setLoadingStage('');
+            } else {
+              throw new Error('生成连接提前结束，未收到有效内容');
             }
           } finally {
             reader.releaseLock();

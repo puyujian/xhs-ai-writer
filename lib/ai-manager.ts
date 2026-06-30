@@ -106,6 +106,38 @@ export class AIManager {
   }
 
   /**
+   * 给第三方 OpenAI-compatible 请求加真正的墙钟超时。
+   * SDK 的 timeout 在部分流式代理上只覆盖建连/首包，不能可靠约束后续 SSE 读取。
+   */
+  private async runWithTimeout<T>(
+    work: Promise<T>,
+    timeoutMs: number,
+    message: string,
+    onTimeout?: () => void
+  ): Promise<T> {
+    if (timeoutMs <= 0) {
+      onTimeout?.();
+      throw new Error(message);
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        onTimeout?.();
+        reject(new Error(message));
+      }, timeoutMs);
+    });
+
+    try {
+      return await Promise.race([work, timeoutPromise]);
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
+  }
+
+  /**
    * 验证JSON响应
    */
   private validateJsonResponse(content: string, expectedFields: string[] = []): ValidationResult {
@@ -309,7 +341,7 @@ export class AIManager {
       for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
         // 检查剩余时间
         const remainingTime = getRemainingTime();
-        if (remainingTime <= 5000) { // 预留 5 秒缓冲
+        if (remainingTime <= CONFIG.AI_TIMEOUT_RESPONSE_BUFFER) {
           lastError = new Error('AI分析已超过剩余执行时间');
           if (debugLoggingEnabled) {
             console.warn(`⏱️ 剩余时间不足 (${remainingTime}ms)，停止重试`);
@@ -334,6 +366,7 @@ export class AIManager {
             model: currentModel,
             messages: [{ role: "user", content: prompt }],
             temperature,
+            max_tokens: CONFIG.AI_ANALYSIS_MAX_TOKENS,
           };
 
           // 只有在非Gemini模型时才使用response_format
@@ -341,11 +374,23 @@ export class AIManager {
           if (!currentModel.toLowerCase().includes('gemini')) {
             requestParams.response_format = { type: "json_object" };
           }
-          // 注意：不设置max_tokens，让模型自然生成完整响应
+          // 限制输出上限，避免第三方模型无界输出拖到函数超时
 
           // 动态计算请求超时：取配置超时和剩余时间的较小值
-          const requestTimeout = Math.min(CONFIG.AI_REQUEST_TIMEOUT, remainingTime - 2000);
-          const response = await client.chat.completions.create(requestParams, { timeout: requestTimeout });
+          const requestTimeout = Math.min(
+            CONFIG.AI_REQUEST_TIMEOUT,
+            remainingTime - CONFIG.AI_TIMEOUT_RESPONSE_BUFFER
+          );
+          const controller = new AbortController();
+          const response = await this.runWithTimeout(
+            client.chat.completions.create(requestParams, {
+              timeout: requestTimeout,
+              signal: controller.signal,
+            }),
+            requestTimeout,
+            `AI分析请求超时（${Math.round(requestTimeout / 1000)}秒）`,
+            () => controller.abort()
+          );
 
           // [核心修复] 增加对 response.choices 的有效性检查
           if (!response || !response.choices || response.choices.length === 0) {
@@ -408,7 +453,7 @@ export class AIManager {
       }
 
       // 检查剩余时间，如果不足则不再切换模型
-      if (getRemainingTime() <= 5000) {
+      if (getRemainingTime() <= CONFIG.AI_TIMEOUT_RESPONSE_BUFFER) {
         if (debugLoggingEnabled) {
           console.warn(`⏱️ 剩余时间不足，停止模型切换`);
         }
@@ -459,7 +504,7 @@ export class AIManager {
       for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
         // 检查剩余时间
         const remainingTime = getRemainingTime();
-        if (remainingTime <= 5000) {
+        if (remainingTime <= CONFIG.AI_TIMEOUT_RESPONSE_BUFFER) {
           lastError = new Error('流式生成已超过剩余执行时间');
           if (debugLoggingEnabled) {
             console.warn(`⏱️ 剩余时间不足 (${remainingTime}ms)，停止重试`);
@@ -472,32 +517,80 @@ export class AIManager {
           }
 
           const client = this.getClient();
-          // 动态计算请求超时：取配置超时和剩余时间的较小值
-          const requestTimeout = Math.min(CONFIG.AI_STREAM_TIMEOUT, remainingTime - 2000);
+          // 动态计算请求超时：取配置超时和剩余时间的较小值，并预留时间返回SSE错误
+          const requestTimeout = Math.min(
+            CONFIG.AI_STREAM_TIMEOUT,
+            remainingTime - CONFIG.AI_TIMEOUT_RESPONSE_BUFFER
+          );
+          const requestController = new AbortController();
           // 生成任务更偏“内容多样性”，默认允许更高温度，必要时由调用方覆盖
           const temperature = typeof options.temperature === 'number'
             ? options.temperature
             : CONFIG.TEMPERATURE;
-          const response = await client.chat.completions.create(
-            {
-              model: currentModel,
-              messages: [{ role: "user", content: prompt }],
-              stream: true,
-              temperature,
-            },
-            { timeout: requestTimeout }
+          const response = await this.runWithTimeout(
+            client.chat.completions.create(
+              {
+                model: currentModel,
+                messages: [{ role: "user", content: prompt }],
+                stream: true,
+                temperature,
+                max_tokens: CONFIG.AI_GENERATION_MAX_TOKENS,
+              },
+              {
+                timeout: requestTimeout,
+                signal: requestController.signal,
+              }
+            ),
+            requestTimeout,
+            `AI流式请求超时（${Math.round(requestTimeout / 1000)}秒）`,
+            () => requestController.abort()
           );
 
         let hasContent = false;
+        const streamStartedAt = Date.now();
         let lastChunkTime = Date.now();
+        let lastContentTime = Date.now();
+        const iterator = response[Symbol.asyncIterator]();
 
-        for await (const chunk of response) {
-          // 检查剩余时间，防止流式生成超时
-          if (getRemainingTime() <= 2000) {
-            if (debugLoggingEnabled) {
-              console.warn(`⏱️ 流式生成剩余时间不足，提前结束`);
-            }
+        while (true) {
+          const loopRemainingTime = getRemainingTime();
+          if (loopRemainingTime <= CONFIG.AI_TIMEOUT_RESPONSE_BUFFER) {
+            requestController.abort();
+            throw new Error('流式生成已接近Vercel执行时间上限，已提前中止');
+          }
+
+          const contentWaitTimeout = hasContent
+            ? CONFIG.AI_STREAM_IDLE_TIMEOUT
+            : CONFIG.AI_STREAM_FIRST_CHUNK_TIMEOUT;
+          const nextTimeout = Math.min(
+            contentWaitTimeout,
+            loopRemainingTime - CONFIG.AI_TIMEOUT_RESPONSE_BUFFER
+          );
+
+          const next = await this.runWithTimeout(
+            iterator.next(),
+            nextTimeout,
+            hasContent
+              ? `AI流式生成超过${Math.round(CONFIG.AI_STREAM_IDLE_TIMEOUT / 1000)}秒没有新增正文内容`
+              : `AI流式生成超过${Math.round(CONFIG.AI_STREAM_FIRST_CHUNK_TIMEOUT / 1000)}秒没有返回正文内容`,
+            () => requestController.abort()
+          );
+
+          if (next.done) {
             break;
+          }
+
+          const chunk = next.value;
+          const now = Date.now();
+
+          if (!hasContent && now - streamStartedAt > CONFIG.AI_STREAM_FIRST_CHUNK_TIMEOUT) {
+            requestController.abort();
+            throw new Error(`AI流式生成超过${Math.round(CONFIG.AI_STREAM_FIRST_CHUNK_TIMEOUT / 1000)}秒没有返回正文内容`);
+          }
+
+          if (hasContent && now - lastContentTime > CONFIG.AI_STREAM_IDLE_TIMEOUT) {
+            requestController.abort();
+            throw new Error(`AI流式生成超过${Math.round(CONFIG.AI_STREAM_IDLE_TIMEOUT / 1000)}秒没有新增正文内容`);
           }
 
           // [核心修复] 增加对 chunk.choices 的有效性检查
@@ -511,11 +604,11 @@ export class AIManager {
           const content = chunk.choices[0]?.delta?.content || '';
           if (content) {
             hasContent = true;
-            lastChunkTime = Date.now();
+            lastChunkTime = now;
+            lastContentTime = now;
             onChunk(content);
           } else {
             // 心跳机制：如果超过500ms没有内容，发送一个空的心跳
-            const now = Date.now();
             if (now - lastChunkTime > 500) {
               onChunk(''); // 发送空内容作为心跳
               lastChunkTime = now;
@@ -551,7 +644,7 @@ export class AIManager {
       }
 
       // 检查剩余时间，如果不足则不再切换模型
-      if (getRemainingTime() <= 5000) {
+      if (getRemainingTime() <= CONFIG.AI_TIMEOUT_RESPONSE_BUFFER) {
         if (debugLoggingEnabled) {
           console.warn(`⏱️ 剩余时间不足，停止模型切换`);
         }
