@@ -64,8 +64,9 @@ export const CONFIG = {
   REQUEST_TIMEOUT: readPositiveNumberEnv('REQUEST_TIMEOUT_MS', 15000), // 15秒通用请求超时
   AI_REQUEST_TIMEOUT: readPositiveNumberEnv('AI_REQUEST_TIMEOUT_MS', 90000), // 90秒 AI 请求超时（单次请求）
   AI_STREAM_TIMEOUT: readPositiveNumberEnv('AI_STREAM_TIMEOUT_MS', 120000), // 120秒 AI 流式生成超时
-  AI_STREAM_FIRST_CHUNK_TIMEOUT: readPositiveNumberEnv('AI_STREAM_FIRST_CHUNK_TIMEOUT_MS', 45000), // 45秒内必须产生正文内容，避免第三方流式接口空转
-  AI_STREAM_IDLE_TIMEOUT: readPositiveNumberEnv('AI_STREAM_IDLE_TIMEOUT_MS', 30000), // 流式正文超过30秒无新增内容就中止并重试/报错
+  // 思考型模型（如 grok-4.5）可能先输出 reasoning/空 delta，首段正文会明显晚于建连
+  AI_STREAM_FIRST_CHUNK_TIMEOUT: readPositiveNumberEnv('AI_STREAM_FIRST_CHUNK_TIMEOUT_MS', 100000), // 100秒内必须产生正文内容
+  AI_STREAM_CONTENT_IDLE_TIMEOUT: readPositiveNumberEnv('AI_STREAM_CONTENT_IDLE_TIMEOUT_MS', 45000), // 已有正文后超过45秒无新增文本则中止
   AI_TIMEOUT_RESPONSE_BUFFER: readPositiveNumberEnv('AI_TIMEOUT_RESPONSE_BUFFER_MS', 10000), // 给SSE错误返回和函数清理预留时间
   AI_GENERATION_MAX_TOKENS: readPositiveNumberEnv('AI_GENERATION_MAX_TOKENS', 2400), // 限制正文生成长度，避免模型无界输出拖到Vercel超时
   AI_ANALYSIS_MAX_TOKENS: readPositiveNumberEnv('AI_ANALYSIS_MAX_TOKENS', 2200), // 限制分析响应长度

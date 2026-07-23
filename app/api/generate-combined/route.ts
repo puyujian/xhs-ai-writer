@@ -207,8 +207,16 @@ export async function POST(request: Request) {
           combinedPrompt,
           // onChunk: 处理每个内容块
           (content: string) => {
+            // 忽略空块（旧心跳/空 delta），避免日志噪声与误计时
+            if (!content) {
+              return;
+            }
+
             // 第一步：净化文本，移除潜在的零宽字符等水印
             let cleanContent = sanitizeText(content);
+            if (!cleanContent) {
+              return;
+            }
 
             // 后续所有操作都使用净化后的 cleanContent
             accumulatedContent += cleanContent;
@@ -220,20 +228,25 @@ export async function POST(request: Request) {
               if (startIndex !== -1) {
                 // 找到了开始标记，说明正式内容开始了
                 contentStarted = true;
-                // 计算在当前chunk中的相对位置
-                const chunkStartIndex = startIndex - (accumulatedContent.length - content.length);
+                // 计算在当前chunk中的相对位置（基于净化后的文本）
+                const chunkStartIndex = startIndex - (accumulatedContent.length - cleanContent.length);
                 if (chunkStartIndex >= 0) {
                   // 开始标记在当前chunk中，只发送从标记开始的部分
-                  chunkToSend = content.substring(chunkStartIndex);
+                  chunkToSend = cleanContent.substring(chunkStartIndex);
                 } else {
                   // 开始标记在之前的chunk中，发送完整的当前chunk
-                  chunkToSend = content;
+                  chunkToSend = cleanContent;
                 }
 
                 console.log('🎯 检测到内容开始标记，开始发送内容');
               } else {
                 // 没找到开始标记，且内容未开始，忽略这个块
-                console.log('⏭️ 跳过前置内容:', content.substring(0, 50) + '...');
+                if (debugLoggingEnabled) {
+                  const preview = cleanContent.replace(/\s+/g, ' ').substring(0, 40);
+                  if (preview) {
+                    console.log('⏭️ 跳过前置内容:', preview);
+                  }
+                }
                 return;
               }
             }

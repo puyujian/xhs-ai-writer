@@ -548,7 +548,6 @@ export class AIManager {
 
         let hasContent = false;
         const streamStartedAt = Date.now();
-        let lastChunkTime = Date.now();
         let lastContentTime = Date.now();
         const iterator = response[Symbol.asyncIterator]();
 
@@ -559,19 +558,32 @@ export class AIManager {
             throw new Error('流式生成已接近Vercel执行时间上限，已提前中止');
           }
 
-          const contentWaitTimeout = hasContent
-            ? CONFIG.AI_STREAM_IDLE_TIMEOUT
-            : CONFIG.AI_STREAM_FIRST_CHUNK_TIMEOUT;
+          // 等待下一个 chunk：
+          // - 尚无正文：允许等待到 FIRST_CHUNK 上限（思考型模型可能长时间无 delta）
+          // - 已有正文：用 CONTENT_IDLE 防止半截流挂死
+          const elapsed = Date.now() - streamStartedAt;
+          const activityWaitTimeout = hasContent
+            ? CONFIG.AI_STREAM_CONTENT_IDLE_TIMEOUT
+            : Math.max(1000, CONFIG.AI_STREAM_FIRST_CHUNK_TIMEOUT - elapsed);
           const nextTimeout = Math.min(
-            contentWaitTimeout,
+            activityWaitTimeout,
             loopRemainingTime - CONFIG.AI_TIMEOUT_RESPONSE_BUFFER
           );
+
+          if (nextTimeout <= 0) {
+            requestController.abort();
+            throw new Error(
+              hasContent
+                ? `AI流式生成超过${Math.round(CONFIG.AI_STREAM_CONTENT_IDLE_TIMEOUT / 1000)}秒没有新增正文内容`
+                : `AI流式生成超过${Math.round(CONFIG.AI_STREAM_FIRST_CHUNK_TIMEOUT / 1000)}秒没有返回正文内容`
+            );
+          }
 
           const next = await this.runWithTimeout(
             iterator.next(),
             nextTimeout,
             hasContent
-              ? `AI流式生成超过${Math.round(CONFIG.AI_STREAM_IDLE_TIMEOUT / 1000)}秒没有新增正文内容`
+              ? `AI流式生成超过${Math.round(CONFIG.AI_STREAM_CONTENT_IDLE_TIMEOUT / 1000)}秒没有新增正文内容`
               : `AI流式生成超过${Math.round(CONFIG.AI_STREAM_FIRST_CHUNK_TIMEOUT / 1000)}秒没有返回正文内容`,
             () => requestController.abort()
           );
@@ -583,17 +595,17 @@ export class AIManager {
           const chunk = next.value;
           const now = Date.now();
 
+          // 思考型模型可能持续推送空/reasoning chunk；仅在“完全无正文且总等待过长”时失败
           if (!hasContent && now - streamStartedAt > CONFIG.AI_STREAM_FIRST_CHUNK_TIMEOUT) {
             requestController.abort();
             throw new Error(`AI流式生成超过${Math.round(CONFIG.AI_STREAM_FIRST_CHUNK_TIMEOUT / 1000)}秒没有返回正文内容`);
           }
 
-          if (hasContent && now - lastContentTime > CONFIG.AI_STREAM_IDLE_TIMEOUT) {
+          if (hasContent && now - lastContentTime > CONFIG.AI_STREAM_CONTENT_IDLE_TIMEOUT) {
             requestController.abort();
-            throw new Error(`AI流式生成超过${Math.round(CONFIG.AI_STREAM_IDLE_TIMEOUT / 1000)}秒没有新增正文内容`);
+            throw new Error(`AI流式生成超过${Math.round(CONFIG.AI_STREAM_CONTENT_IDLE_TIMEOUT / 1000)}秒没有新增正文内容`);
           }
 
-          // [核心修复] 增加对 chunk.choices 的有效性检查
           if (!chunk || !chunk.choices || chunk.choices.length === 0) {
             if (debugLoggingEnabled) {
               console.warn('⚠️ 流式响应块缺少choices字段，跳过此块');
@@ -601,19 +613,18 @@ export class AIManager {
             continue;
           }
 
-          const content = chunk.choices[0]?.delta?.content || '';
+          // 兼容部分代理：reasoning 可能在 delta.reasoning / delta.reasoning_content（不转发）
+          const delta = chunk.choices[0]?.delta as
+            | { content?: string | null; reasoning?: string | null; reasoning_content?: string | null }
+            | undefined;
+          const content = delta?.content || '';
+
           if (content) {
             hasContent = true;
-            lastChunkTime = now;
             lastContentTime = now;
             onChunk(content);
-          } else {
-            // 心跳机制：如果超过500ms没有内容，发送一个空的心跳
-            if (now - lastChunkTime > 500) {
-              onChunk(''); // 发送空内容作为心跳
-              lastChunkTime = now;
-            }
           }
+          // 不再发送空心跳：会污染“跳过前置内容”日志，且客户端会忽略空 content
         }
 
           if (!hasContent) {
