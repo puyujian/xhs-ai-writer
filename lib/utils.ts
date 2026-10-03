@@ -99,19 +99,11 @@ export function createErrorResponse(
 export function sanitizeText(text: string): string {
   if (!text) return '';
 
-  // 这个正则表达式匹配所有非"标准"字符。
-  // 我们保留：
-  // \p{L}: 所有语言的字母 (包括汉字)
-  // \p{N}: 所有数字
-  // \p{P}: 所有标点符号
-  // \p{S}: 所有符号 (包括Emoji)
-  // \p{Z}: 所有空白符 (包括普通空格)
-  // \s: 标准空白符 (换行、制表符等)
-  // *#[](): 保留Markdown特殊字符
-  // 除了以上字符，其他的 (特别是控制字符和不可见字符) 都会被移除。
-  const sanitized = text.replace(/[^\u4e00-\u9fff\u3400-\u4dbf\u20000-\u2a6df\u2a700-\u2b73f\u2b740-\u2b81f\u2b820-\u2ceaf\u2ceb0-\u2ebef\u30000-\u3134f\ua000-\ua48f\ua490-\ua4cf\uac00-\ud7af\u1100-\u11ff\u3130-\u318f\ua960-\ua97f\ud7b0-\ud7ff\u0041-\u005a\u0061-\u007a\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u00ff\u0100-\u017f\u0180-\u024f\u1e00-\u1eff\u0030-\u0039\u00b2\u00b3\u00b9\u00bc-\u00be\u2070\u2074-\u2079\u2080-\u2089\u2150-\u218f\u2460-\u24ff\u2776-\u2793\u2cfd\u3007\u3021-\u3029\u3038-\u303a\ua6e6-\ua6ef\u0020-\u002f\u003a-\u0040\u005b-\u0060\u007b-\u007e\u00a0-\u00bf\u2000-\u206f\u2e00-\u2e7f\u3000-\u303f\ufe30-\ufe4f\ufe50-\ufe6f\uff00-\uffef\s*#\[\]()]/g, '');
-
-  return sanitized;
+  // Unicode属性保留中文、Emoji、组合音标和Markdown，只移除控制字符/隐形水印。
+  // 使用RegExp构造器以兼容项目的ES5编译目标（运行环境为现代Node/浏览器）。
+  const invisibleCharacters = /[\u200B\u200C\u200E\u200F\u2060\uFEFF]/g;
+  const unsupportedCharacters = new RegExp('[^\\p{L}\\p{M}\\p{N}\\p{P}\\p{S}\\p{Z}\\t\\r\\n\\u200D]', 'gu');
+  return text.replace(invisibleCharacters, '').replace(unsupportedCharacters, '');
 }
 
 /**

@@ -35,6 +35,7 @@ interface RetryConfig {
  */
 interface AICallOptions {
   temperature?: number;
+  signal?: AbortSignal;
 }
 
 /**
@@ -56,7 +57,8 @@ export class AIManager {
    */
   private getModelList(): string[] {
     const modelNames = getEnvVar('AI_MODEL_NAME', CONFIG.DEFAULT_AI_MODEL);
-    return modelNames.split(',').map(name => name.trim()).filter(name => name.length > 0);
+    const models = Array.from(new Set(modelNames.split(',').map(name => name.trim()).filter(Boolean)));
+    return models.length ? models : [CONFIG.DEFAULT_AI_MODEL];
   }
 
   /**
@@ -492,193 +494,156 @@ export class AIManager {
     options: AICallOptions = {}
   ): Promise<void> {
     const modelList = this.getModelList();
-    let lastError: Error | null = null;
-    const startTime = Date.now();
-    const getRemainingTime = () => overallTimeoutMs - (Date.now() - startTime);
+    const attemptedModels: string[] = [];
+    let lastError: Error = new Error('没有足够的执行时间启动生成');
+    let emittedContent = false;
+    const deadline = Date.now() + overallTimeoutMs - CONFIG.AI_TIMEOUT_RESPONSE_BUFFER;
+    const getRemainingTime = () => deadline - Date.now();
+    const minimumAttemptMs = CONFIG.AI_STREAM_MIN_ATTEMPT_TIMEOUT;
 
-    // 遍历所有可用模型
-    for (let modelIndex = 0; modelIndex < modelList.length; modelIndex++) {
+    modelLoop: for (let modelIndex = 0; modelIndex < modelList.length; modelIndex++) {
       const currentModel = modelList[modelIndex];
-
-      // 对每个模型进行重试
       for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
-        // 检查剩余时间
+        if (options.signal?.aborted) return;
         const remainingTime = getRemainingTime();
-        if (remainingTime <= CONFIG.AI_TIMEOUT_RESPONSE_BUFFER) {
-          lastError = new Error('流式生成已超过剩余执行时间');
-          if (debugLoggingEnabled) {
-            console.warn(`⏱️ 剩余时间不足 (${remainingTime}ms)，停止重试`);
-          }
-          break;
-        }
-        try {
-          if (debugLoggingEnabled) {
-            console.log(`🤖 流式生成尝试 ${attempt + 1}/${this.retryConfig.maxRetries + 1} (模型: ${currentModel}, 剩余: ${Math.round(remainingTime / 1000)}s)`);
-          }
+        // 不发起注定失败的亚秒请求，也不要用预算错误覆盖真正的上游错误。
+        if (remainingTime < minimumAttemptMs) break modelLoop;
 
+        // 首个模型不能耗尽预算；拿到正文后才允许使用剩余的完整预算。
+        const modelsLeft = modelList.length - modelIndex;
+        const firstContentBudget = Math.min(
+          CONFIG.AI_STREAM_TIMEOUT,
+          CONFIG.AI_STREAM_FIRST_CHUNK_TIMEOUT,
+          modelsLeft > 1 ? Math.max(minimumAttemptMs, Math.floor(remainingTime / 2)) : remainingTime
+        );
+        const firstContentDeadline = Date.now() + firstContentBudget;
+        const requestController = new AbortController();
+        const abortRequest = () => requestController.abort();
+        options.signal?.addEventListener('abort', abortRequest, { once: true });
+        let response: Awaited<ReturnType<OpenAI['chat']['completions']['create']>> | undefined;
+        let timedOut = false;
+        let retrySameModel = false;
+        attemptedModels.push(currentModel);
+
+        const wait = <T>(work: Promise<T>, timeoutMs: number, message: string) =>
+          this.runWithTimeout(work, timeoutMs, message, () => {
+            timedOut = true;
+            requestController.abort();
+          });
+
+        try {
+          options.signal?.throwIfAborted();
+          if (debugLoggingEnabled) {
+            console.log(`🤖 流式生成 (模型: ${currentModel}, 首段预算: ${Math.round(firstContentBudget / 1000)}s)`);
+          }
           const client = this.getClient();
-          // 动态计算请求超时：取配置超时和剩余时间的较小值，并预留时间返回SSE错误
-          const requestTimeout = Math.min(
-            CONFIG.AI_STREAM_TIMEOUT,
-            remainingTime - CONFIG.AI_TIMEOUT_RESPONSE_BUFFER
-          );
-          const requestController = new AbortController();
-          // 生成任务更偏“内容多样性”，默认允许更高温度，必要时由调用方覆盖
-          const temperature = typeof options.temperature === 'number'
-            ? options.temperature
-            : CONFIG.TEMPERATURE;
-          const response = await this.runWithTimeout(
+          const stream = await wait(
             client.chat.completions.create(
               {
                 model: currentModel,
-                messages: [{ role: "user", content: prompt }],
+                messages: [{ role: 'user', content: prompt }],
                 stream: true,
-                temperature,
+                temperature: options.temperature ?? CONFIG.TEMPERATURE,
                 max_tokens: CONFIG.AI_GENERATION_MAX_TOKENS,
               },
-              {
-                timeout: requestTimeout,
-                signal: requestController.signal,
-              }
+              { timeout: firstContentBudget, signal: requestController.signal }
             ),
-            requestTimeout,
-            `AI流式请求超时（${Math.round(requestTimeout / 1000)}秒）`,
-            () => requestController.abort()
+            firstContentBudget,
+            'AI连接超时，尝试备用模型'
           );
+          response = stream;
+          const iterator = stream[Symbol.asyncIterator]();
+          let lastContentTime = Date.now();
+          let hasContent = false;
+          let leadingWhitespace = '';
 
-        let hasContent = false;
-        const streamStartedAt = Date.now();
-        let lastContentTime = Date.now();
-        const iterator = response[Symbol.asyncIterator]();
-
-        while (true) {
-          const loopRemainingTime = getRemainingTime();
-          if (loopRemainingTime <= CONFIG.AI_TIMEOUT_RESPONSE_BUFFER) {
-            requestController.abort();
-            throw new Error('流式生成已接近Vercel执行时间上限，已提前中止');
-          }
-
-          // 等待下一个 chunk：
-          // - 尚无正文：允许等待到 FIRST_CHUNK 上限（思考型模型可能长时间无 delta）
-          // - 已有正文：用 CONTENT_IDLE 防止半截流挂死
-          const elapsed = Date.now() - streamStartedAt;
-          const activityWaitTimeout = hasContent
-            ? CONFIG.AI_STREAM_CONTENT_IDLE_TIMEOUT
-            : Math.max(1000, CONFIG.AI_STREAM_FIRST_CHUNK_TIMEOUT - elapsed);
-          const nextTimeout = Math.min(
-            activityWaitTimeout,
-            loopRemainingTime - CONFIG.AI_TIMEOUT_RESPONSE_BUFFER
-          );
-
-          if (nextTimeout <= 0) {
-            requestController.abort();
-            throw new Error(
-              hasContent
-                ? `AI流式生成超过${Math.round(CONFIG.AI_STREAM_CONTENT_IDLE_TIMEOUT / 1000)}秒没有新增正文内容`
-                : `AI流式生成超过${Math.round(CONFIG.AI_STREAM_FIRST_CHUNK_TIMEOUT / 1000)}秒没有返回正文内容`
+          while (true) {
+            options.signal?.throwIfAborted();
+            // 建连、空 delta、reasoning 都不能重置首段/正文空闲计时。
+            const activityDeadline = hasContent
+              ? lastContentTime + CONFIG.AI_STREAM_CONTENT_IDLE_TIMEOUT
+              : firstContentDeadline;
+            const nextTimeout = Math.min(activityDeadline, deadline) - Date.now();
+            const next = await wait(
+              iterator.next(),
+              nextTimeout,
+              hasContent ? 'AI正文流中断或超时' : 'AI未在首段预算内返回正文，尝试备用模型'
             );
-          }
-
-          const next = await this.runWithTimeout(
-            iterator.next(),
-            nextTimeout,
-            hasContent
-              ? `AI流式生成超过${Math.round(CONFIG.AI_STREAM_CONTENT_IDLE_TIMEOUT / 1000)}秒没有新增正文内容`
-              : `AI流式生成超过${Math.round(CONFIG.AI_STREAM_FIRST_CHUNK_TIMEOUT / 1000)}秒没有返回正文内容`,
-            () => requestController.abort()
-          );
-
-          if (next.done) {
-            break;
-          }
-
-          const chunk = next.value;
-          const now = Date.now();
-
-          // 思考型模型可能持续推送空/reasoning chunk；仅在“完全无正文且总等待过长”时失败
-          if (!hasContent && now - streamStartedAt > CONFIG.AI_STREAM_FIRST_CHUNK_TIMEOUT) {
-            requestController.abort();
-            throw new Error(`AI流式生成超过${Math.round(CONFIG.AI_STREAM_FIRST_CHUNK_TIMEOUT / 1000)}秒没有返回正文内容`);
-          }
-
-          if (hasContent && now - lastContentTime > CONFIG.AI_STREAM_CONTENT_IDLE_TIMEOUT) {
-            requestController.abort();
-            throw new Error(`AI流式生成超过${Math.round(CONFIG.AI_STREAM_CONTENT_IDLE_TIMEOUT / 1000)}秒没有新增正文内容`);
-          }
-
-          if (!chunk || !chunk.choices || chunk.choices.length === 0) {
-            if (debugLoggingEnabled) {
-              console.warn('⚠️ 流式响应块缺少choices字段，跳过此块');
+            if (next.done) break;
+            const choice = next.value?.choices?.[0];
+            const content = choice?.delta?.content;
+            if (typeof content === 'string' && content.length > 0) {
+              if (content.trim()) {
+                hasContent = true;
+                emittedContent = true;
+                lastContentTime = Date.now();
+                onChunk(leadingWhitespace + content);
+                leadingWhitespace = '';
+              } else if (hasContent) {
+                onChunk(content); // 保留排版空白，但不能延长正文空闲计时。
+              } else {
+                leadingWhitespace = (leadingWhitespace + content).slice(-1024);
+              }
             }
-            continue;
+            if (choice?.finish_reason === 'length') {
+              throw new Error('AI输出达到长度上限，内容可能不完整');
+            }
+            if (choice?.finish_reason === 'content_filter') {
+              throw new Error('AI输出被上游内容过滤器中止');
+            }
           }
-
-          // 兼容部分代理：reasoning 可能在 delta.reasoning / delta.reasoning_content（不转发）
-          const delta = chunk.choices[0]?.delta as
-            | { content?: string | null; reasoning?: string | null; reasoning_content?: string | null }
-            | undefined;
-          const content = delta?.content || '';
-
-          if (content) {
-            hasContent = true;
-            lastContentTime = now;
-            onChunk(content);
-          }
-          // 不再发送空心跳：会污染“跳过前置内容”日志，且客户端会忽略空 content
-        }
-
-          if (!hasContent) {
-            throw new Error('AI没有返回任何内容');
-          }
-
-          if (debugLoggingEnabled) {
-            console.log(`✅ 流式生成成功 (模型: ${currentModel})`);
-          }
+          if (!hasContent) throw new Error('AI没有返回任何正文内容');
+          if (debugLoggingEnabled) console.log(`✅ 流式生成成功 (模型: ${currentModel})`);
           return;
-
         } catch (error) {
+          if (options.signal?.aborted) return;
           lastError = error instanceof Error ? error : new Error(String(error));
-
+          timedOut ||= /timeout|timed out|超时/i.test(lastError.name + ' ' + lastError.message);
           if (debugLoggingEnabled) {
-            console.warn(`⚠️ 模型 ${currentModel} 流式生成尝试 ${attempt + 1} 失败:`, lastError.message);
+            console.warn(`⚠️ 模型 ${currentModel} 失败: ${lastError.message}`);
           }
-
-          // 如果不是最后一次尝试，等待后重试
-          if (attempt < this.retryConfig.maxRetries) {
-            const delayMs = this.calculateDelay(attempt);
-            if (debugLoggingEnabled) {
-              console.log(`⏳ 等待 ${delayMs}ms 后重试...`);
-            }
-            await this.delay(delayMs);
-          }
+          // 已转发部分内容时不能重试，否则会把两份答案拼接在一起。
+          if (emittedContent) break modelLoop;
+          const status = (error as { status?: number } | null)?.status;
+          const permanentError = error instanceof BusinessError && !error.canRetry;
+          if (permanentError) break modelLoop;
+          // 超时和4xx直接切换模型；仅对短暂网络/5xx错误原模型重试。
+          const delayMs = this.calculateDelay(attempt);
+          const reserveForFallback = (modelsLeft - 1) * minimumAttemptMs;
+          retrySameModel = !timedOut && !(status && status >= 400 && status < 500) &&
+            !lastError.message.includes('没有返回任何正文') &&
+            attempt < this.retryConfig.maxRetries &&
+            getRemainingTime() >= delayMs + minimumAttemptMs + reserveForFallback;
+        } finally {
+          options.signal?.removeEventListener('abort', abortRequest);
+          requestController.abort();
+          // 无论成功、读取失败还是回调抛错，都终止旧请求，避免后台继续计费。
+          if (response && 'controller' in response) response.controller.abort();
         }
-      }
 
-      // 检查剩余时间，如果不足则不再切换模型
-      if (getRemainingTime() <= CONFIG.AI_TIMEOUT_RESPONSE_BUFFER) {
-        if (debugLoggingEnabled) {
-          console.warn(`⏱️ 剩余时间不足，停止模型切换`);
-        }
-        break;
-      }
-
-      // 当前模型的所有重试都失败了，尝试下一个模型
-      if (modelIndex < modelList.length - 1) {
-        if (debugLoggingEnabled) {
-          console.log(`🔄 模型 ${currentModel} 失败，尝试下一个模型: ${modelList[modelIndex + 1]}`);
-        }
+        if (!retrySameModel) break;
+        const delayMs = this.calculateDelay(attempt);
+        // 用可取消的等待，用户离开后不再调用下一个模型。
+        await new Promise<void>(resolve => {
+          const finish = () => {
+            clearTimeout(timer);
+            options.signal?.removeEventListener('abort', finish);
+            resolve();
+          };
+          const timer = setTimeout(finish, delayMs);
+          options.signal?.addEventListener('abort', finish, { once: true });
+          if (options.signal?.aborted) finish();
+        });
       }
     }
 
-    // 所有模型和重试都失败了
-    const finalError = new BusinessError(
-      `流式生成失败，已尝试所有模型 [${modelList.join(', ')}]，每个模型重试${this.retryConfig.maxRetries}次: ${lastError?.message}`,
-      '内容生成失败',
+    if (options.signal?.aborted) return;
+    onError(new BusinessError(
+      `流式生成失败，实际尝试模型 [${Array.from(new Set(attemptedModels)).join(', ')}]: ${lastError.message}`,
+      emittedContent ? '生成中断，已保留部分内容' : '内容生成失败',
       '请稍后重试，如果问题持续请联系技术支持',
       true
-    );
-
-    onError(finalError);
+    ));
   }
 
   /**

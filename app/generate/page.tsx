@@ -9,6 +9,7 @@ import { Clipboard, Check, ArrowLeft, ArrowUp } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { GeneratedContent } from '@/lib/types'
+import { readGenerationStream } from '@/lib/generation-sse'
 
 // 优化的Markdown渲染组件
 const OptimizedMarkdown = memo(({ content }: { content: string }) => {
@@ -31,13 +32,13 @@ const OptimizedMarkdown = memo(({ content }: { content: string }) => {
 });
 
 OptimizedMarkdown.displayName = 'OptimizedMarkdown';
-const titleRegex = /##\s*1[.、]?\s*(爆款标题创作|标题|生成标题)(\s*（\d+个）)?/i;
-const bodyRegex = /##\s*2[.、]?\s*(正文内容|笔记正文|内容|正文|文案内容)/i;
-const tagsRegex = /##\s*3[.、]?\s*(关键词标签|标签|关键词)(\s*（\d+-\d+个）)?/i;
-const imagePromptRegex = /##\s*4[.、]?\s*(AI绘画提示词|绘画提示词|AI绘画|绘画提示)/i;
-const selfCommentRegex = /##\s*5[.、]?\s*(首评关键词引导|首评)/i;
-const strategyRegex = /##\s*6[.、]?\s*(发布策略建议|发布策略)/i;
-const playbookRegex = /##\s*7[.、]?\s*(小红书增长 Playbook|增长 Playbook)/i;
+const titleRegex = /(?:^|\n)[ \t]*(?:#{1,6}[ \t]*)?1[.、．]?[ \t]*(爆款标题创作|标题创作|生成标题|标题)([ \t]*[（(]\d+个[）)])?/im;
+const bodyRegex = /(?:^|\n)[ \t]*(?:#{1,6}[ \t]*)?2[.、．]?[ \t]*(正文内容|笔记正文|文案内容|内容|正文)/im;
+const tagsRegex = /(?:^|\n)[ \t]*(?:#{1,6}[ \t]*)?3[.、．]?[ \t]*(关键词标签|标签|关键词)([ \t]*[（(]\d+-\d+个[）)])?/im;
+const imagePromptRegex = /(?:^|\n)[ \t]*(?:#{1,6}[ \t]*)?4[.、．]?[ \t]*(AI绘画提示词|绘画提示词|AI绘画|绘画提示)/im;
+const selfCommentRegex = /(?:^|\n)[ \t]*(?:#{1,6}[ \t]*)?5[.、．]?[ \t]*(首评关键词引导|首评)/im;
+const strategyRegex = /(?:^|\n)[ \t]*(?:#{1,6}[ \t]*)?6[.、．]?[ \t]*(发布策略建议|发布策略)/im;
+const playbookRegex = /(?:^|\n)[ \t]*(?:#{1,6}[ \t]*)?7[.、．]?[ \t]*(小红书增长 Playbook|增长 Playbook)/im;
 
 // 简单的文本格式化函数
 const formatText = (text: string) => {
@@ -260,7 +261,7 @@ function GeneratePageContent() {
   };
 
   // 开始生成的函数
-  const startGeneration = async () => {
+  const startGeneration = useCallback(async () => {
     const keyword = searchParams.get('keyword');
     const userInfo = searchParams.get('userInfo');
     
@@ -270,6 +271,9 @@ function GeneratePageContent() {
       return;
     }
 
+    abortControllerRef.current?.abort();
+    const currentController = new AbortController();
+    abortControllerRef.current = currentController;
     try {
       // 标记开始生成
       setHasGenerated(true);
@@ -280,15 +284,7 @@ function GeneratePageContent() {
       setLoadingStage('fetching-data');
       setDisplayContent('');
       
-      // 确保之前的 AbortController 被清理
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-      
-      // 创建新的 AbortController
-      abortControllerRef.current = new AbortController();
-      const currentController = abortControllerRef.current;
-      
+      setGeneratedContent({ titles: '', body: '', tags: [], imagePrompt: '', selfComment: '', strategy: '', playbook: '' });
       try {
         setLoadingStage('analyzing-trends');
         
@@ -316,67 +312,19 @@ function GeneratePageContent() {
 
         setLoadingStage('generating-content');
 
-        const reader = streamResponse.body?.getReader();
-        const decoder = new TextDecoder();
-
-        if (reader) {
-          try {
-            let sseBuffer = '';
-            let receivedAnyContent = false;
-
-            while (true) {
-              // 检查是否被中止
-              if (currentController.signal.aborted) {
-                console.log('读取被中止');
-                break;
-              }
-              
-              const { done, value } = await reader.read();
-              if (done) break;
-
-              sseBuffer += decoder.decode(value, { stream: true });
-              const lines = sseBuffer.split('\n');
-              sseBuffer = lines.pop() || '';
-
-              for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                  const data = line.slice(6).trimEnd();
-                  if (data === '[DONE]') {
-                    // 生成完成
-                    setLoading(false);
-                    setLoadingStage('');
-                    return;
-                  }
-
-                  let parsed: { content?: string; error?: string };
-                  try {
-                    parsed = JSON.parse(data);
-                  } catch (parseError) {
-                    console.warn('解析错误:', parseError);
-                    // 忽略异常数据行，继续处理下一行
-                    continue;
-                  }
-
-                  if (parsed.content) {
-                    receivedAnyContent = true;
-                    // 立即追加内容到显示区域，实现真正的流式输出
-                    setDisplayContent(prev => prev + parsed.content);
-                  } else if (parsed.error) {
-                    throw new Error(parsed.error);
-                  }
-                }
-              }
+        if (!streamResponse.body) throw new Error('生成响应没有内容，请重试');
+        await readGenerationStream(
+          streamResponse.body,
+          content => {
+            if (abortControllerRef.current === currentController) {
+              setDisplayContent(prev => prev + content);
             }
-
-            if (receivedAnyContent) {
-              setLoading(false);
-              setLoadingStage('');
-            } else {
-              throw new Error('生成连接提前结束，未收到有效内容');
-            }
-          } finally {
-            reader.releaseLock();
-          }
+          },
+          currentController.signal
+        );
+        if (abortControllerRef.current === currentController) {
+          setLoading(false);
+          setLoadingStage('');
         }
       } catch (fetchError) {
         // 检查是否是中止错误
@@ -387,6 +335,7 @@ function GeneratePageContent() {
         throw fetchError;
       }
     } catch (err) {
+      if (currentController.signal.aborted || abortControllerRef.current !== currentController) return;
       console.error('生成失败:', err);
       
       // 提供更详细的错误信息
@@ -405,7 +354,7 @@ function GeneratePageContent() {
       setLoading(false);
       setLoadingStage('');
     }
-  };
+  }, [searchParams]);
 
   // 从URL参数中获取数据并判断是否需要生成
   useEffect(() => {
@@ -458,7 +407,7 @@ function GeneratePageContent() {
     };
 
     checkAndStart();
-  }, [searchParams, parseContent, hasGenerated]);
+  }, [searchParams, parseContent, hasGenerated, startGeneration]);
   
   // 清理函数
   useEffect(() => {
