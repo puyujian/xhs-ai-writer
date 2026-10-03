@@ -23,26 +23,6 @@ export default function Home() {
             <p className="text-lg sm:text-xl text-slate-600 mb-6 max-w-2xl mx-auto leading-relaxed">
               🤖 智能分析热门笔记规律 · ⚡ 实时生成专属爆款文案 · 🎯 助力内容快速出圈
             </p>
-            <div className="flex justify-center gap-3 sm:gap-4 flex-wrap">
-              <a
-                href="https://github.com/EBOLABOY/xhs-ai-writer"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group inline-flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium text-slate-700 bg-gradient-to-r from-slate-100 to-blue-100 border border-slate-200 rounded-xl hover:from-slate-200 hover:to-blue-200 hover:border-slate-300 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-              >
-                <span className="text-lg group-hover:scale-110 transition-transform duration-300">⭐</span>
-                <span>GitHub</span>
-              </a>
-              <a
-                href="https://www.xiaohongshu.com/user/profile/5e141963000000000100158e"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group inline-flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium text-slate-700 bg-gradient-to-r from-blue-100 to-indigo-100 border border-blue-200 rounded-xl hover:from-blue-200 hover:to-indigo-200 hover:border-blue-300 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-              >
-                <span className="text-lg group-hover:scale-110 transition-transform duration-300">📱</span>
-                <span>小红书</span>
-              </a>
-            </div>
           </div>
         </div>
 
