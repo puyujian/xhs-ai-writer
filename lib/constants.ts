@@ -69,7 +69,7 @@ export const CONFIG = {
   AI_STREAM_CONTENT_IDLE_TIMEOUT: readPositiveNumberEnv('AI_STREAM_CONTENT_IDLE_TIMEOUT_MS', 45000), // 已有正文后超过45秒无新增文本则中止
   AI_STREAM_MIN_ATTEMPT_TIMEOUT: readPositiveNumberEnv('AI_STREAM_MIN_ATTEMPT_TIMEOUT_MS', 10000), // 剩余不足10秒时不再启动新模型
   AI_TIMEOUT_RESPONSE_BUFFER: readPositiveNumberEnv('AI_TIMEOUT_RESPONSE_BUFFER_MS', 10000), // 给SSE错误返回和函数清理预留时间
-  AI_GENERATION_MAX_TOKENS: readPositiveNumberEnv('AI_GENERATION_MAX_TOKENS', 2400), // 限制正文生成长度，避免模型无界输出拖到Vercel超时
+  AI_GENERATION_MAX_TOKENS: readPositiveNumberEnv('AI_GENERATION_MAX_TOKENS', 4096), // 正文含7个部分，2400偏小容易触发长度截断；总时长仍由墙钟预算兜底
   AI_ANALYSIS_MAX_TOKENS: readPositiveNumberEnv('AI_ANALYSIS_MAX_TOKENS', 2200), // 限制分析响应长度
   MCP_REQUEST_TIMEOUT: readPositiveNumberEnv('MCP_REQUEST_TIMEOUT_MS', 20000), // 20秒 MCP 请求超时（从30秒降低）
   MCP_HEALTH_CHECK_TIMEOUT: readPositiveNumberEnv('MCP_HEALTH_CHECK_TIMEOUT_MS', 3000), // 3秒 MCP 健康检查超时（从5秒降低）

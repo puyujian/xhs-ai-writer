@@ -181,17 +181,30 @@ test('blank or duplicate model configuration has a safe fallback', async t => {
   assert.deepEqual(manager.getModelList(), ['one', 'two']);
 });
 
-test('finish_reason length must not report truncated content as successful', async t => {
+test('长度截断发生在已有正文之后时保留内容并正常结束', async t => {
   const { manager, calls } = setup(t, (p, o) => Promise.resolve({
     controller: new AbortController(),
     async *[Symbol.asyncIterator]() {
-      yield { choices: [{ delta: { content: '不完整正文' }, finish_reason: 'length' }] };
+      yield { choices: [{ delta: { content: '部分正文' } }] };
+      yield { choices: [{ delta: { content: '更多内容' }, finish_reason: 'length' }] };
     },
   }));
   const result = await generate(manager);
+  assert.deepEqual(result.chunks, ['部分正文', '更多内容']);
+  assert.equal(result.errors.length, 0);
   assert.equal(calls.length, 1);
-  assert.equal(result.errors.length, 1);
-  assert.match(result.errors[0].message, /长度上限/);
+});
+
+test('没有任何正文的长度截断直接切换备用模型', async t => {
+  const { manager, calls } = setup(t, (p, o) => p.model === 'slow'
+    ? Promise.resolve({ controller: new AbortController(), async *[Symbol.asyncIterator]() {
+      yield { choices: [{ delta: {}, finish_reason: 'length' }] };
+    } })
+    : Promise.resolve(stream(['备用正文'], o.signal)));
+  const result = await generate(manager);
+  assert.deepEqual(calls.map(c => c.model), ['slow', 'backup']);
+  assert.equal(result.errors.length, 0);
+  assert.equal(result.chunks.join(''), '备用正文');
 });
 
 test('whitespace-only answers fall back and do not masquerade as substantive output', async t => {

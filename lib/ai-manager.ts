@@ -523,6 +523,7 @@ export class AIManager {
         let response: Awaited<ReturnType<OpenAI['chat']['completions']['create']>> | undefined;
         let timedOut = false;
         let retrySameModel = false;
+        let attemptHadContent = false;
         attemptedModels.push(currentModel);
 
         const wait = <T>(work: Promise<T>, timeoutMs: number, message: string) =>
@@ -575,6 +576,7 @@ export class AIManager {
             if (typeof content === 'string' && content.length > 0) {
               if (content.trim()) {
                 hasContent = true;
+                attemptHadContent = true;
                 emittedContent = true;
                 lastContentTime = Date.now();
                 onChunk(leadingWhitespace + content);
@@ -585,11 +587,14 @@ export class AIManager {
                 leadingWhitespace = (leadingWhitespace + content).slice(-1024);
               }
             }
-            if (choice?.finish_reason === 'length') {
-              throw new Error('AI输出达到长度上限，内容可能不完整');
-            }
             if (choice?.finish_reason === 'content_filter') {
               throw new Error('AI输出被上游内容过滤器中止');
+            }
+            if (choice?.finish_reason === 'length') {
+              // 已收到正文时，长度上限只意味着内容偏短，不应打断用户或丢弃已生成内容。
+              if (!hasContent) throw new Error('AI输出达到长度上限，且没有返回正文内容，尝试备用模型');
+              console.warn(`⚠️ 模型 ${currentModel} 达到输出长度上限，保留已生成内容`);
+              break;
             }
           }
           if (!hasContent) throw new Error('AI没有返回任何正文内容');
@@ -607,12 +612,13 @@ export class AIManager {
           const status = (error as { status?: number } | null)?.status;
           const permanentError = error instanceof BusinessError && !error.canRetry;
           if (permanentError) break modelLoop;
-          // 超时和4xx直接切换模型；仅对短暂网络/5xx错误原模型重试。
           const delayMs = this.calculateDelay(attempt);
           const reserveForFallback = (modelsLeft - 1) * minimumAttemptMs;
-          retrySameModel = !timedOut && !(status && status >= 400 && status < 500) &&
-            !lastError.message.includes('没有返回任何正文') &&
-            attempt < this.retryConfig.maxRetries &&
+          // 只在“没有产生任何内容且看起来是连接类错误”时重试同一模型；
+          // 超时、HTTP状态错误和空响应都直接切换备用模型，把预算留给其他模型。
+          const connectionError = !timedOut && !attemptHadContent && !status &&
+            !/长度上限|没有返回/.test(lastError.message);
+          retrySameModel = connectionError && attempt < this.retryConfig.maxRetries &&
             getRemainingTime() >= delayMs + minimumAttemptMs + reserveForFallback;
         } finally {
           options.signal?.removeEventListener('abort', abortRequest);
