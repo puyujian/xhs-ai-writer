@@ -14,6 +14,7 @@ function setup(t, create, models = 'slow,backup') {
     AI_STREAM_TIMEOUT: 100,
     AI_STREAM_FIRST_CHUNK_TIMEOUT: 100,
     AI_STREAM_CONTENT_IDLE_TIMEOUT: 50,
+    AI_STREAM_REASONING_ONLY_TIMEOUT: 30,
   });
   process.env.AI_MODEL_NAME = models;
   t.after(() => {
@@ -213,4 +214,35 @@ test('whitespace-only answers fall back and do not masquerade as substantive out
   assert.deepEqual(calls.map(c => c.model), ['slow', 'backup']);
   assert.equal(result.errors.length, 0);
   assert.equal(result.chunks.join(''), '\n备用正文\n');
+});
+
+function reasoningOnly(signal) {
+  return {
+    controller: new AbortController(),
+    async *[Symbol.asyncIterator]() {
+      while (!signal.aborted) {
+        await sleep(5);
+        yield { choices: [{ delta: { reasoning_content: '正在思考…' } }] };
+      }
+    },
+  };
+}
+
+test('只输出思考内容时，提前切换备用模型而不是等满首段预算', async t => {
+  const { manager, calls } = setup(t, (p, o) => p.model === 'slow'
+    ? Promise.resolve(reasoningOnly(o.signal))
+    : Promise.resolve(stream(['## 1. 标题\n备用正文'], o.signal)));
+  const result = await generate(manager);
+  assert.deepEqual(calls.map(c => c.model), ['slow', 'backup']);
+  assert.equal(result.errors.length, 0);
+  assert.equal(result.chunks.join(''), '## 1. 标题\n备用正文');
+});
+
+test('所有模型都只输出思考内容时，错误信息说明是思考超时', async t => {
+  const { manager, calls } = setup(t, (p, o) => Promise.resolve(reasoningOnly(o.signal)), 'slow');
+  const result = await generate(manager);
+  assert.equal(calls.length, 1);
+  assert.equal(result.errors.length, 1);
+  assert.match(result.errors[0].message, /思考超时仍未输出正文/);
+  assert.match(result.errors[0].message, /实际尝试模型 \[slow\]/);
 });

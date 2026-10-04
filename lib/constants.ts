@@ -68,6 +68,7 @@ export const CONFIG = {
   AI_STREAM_FIRST_CHUNK_TIMEOUT: readPositiveNumberEnv('AI_STREAM_FIRST_CHUNK_TIMEOUT_MS', 100000), // 100秒内必须产生正文内容
   AI_STREAM_CONTENT_IDLE_TIMEOUT: readPositiveNumberEnv('AI_STREAM_CONTENT_IDLE_TIMEOUT_MS', 45000), // 已有正文后超过45秒无新增文本则中止
   AI_STREAM_MIN_ATTEMPT_TIMEOUT: readPositiveNumberEnv('AI_STREAM_MIN_ATTEMPT_TIMEOUT_MS', 10000), // 剩余不足10秒时不再启动新模型
+  AI_STREAM_REASONING_ONLY_TIMEOUT: readPositiveNumberEnv('AI_STREAM_REASONING_ONLY_TIMEOUT_MS', 45000), // 只输出思考、迟迟不出正文时提前切换备用模型
   AI_TIMEOUT_RESPONSE_BUFFER: readPositiveNumberEnv('AI_TIMEOUT_RESPONSE_BUFFER_MS', 10000), // 给SSE错误返回和函数清理预留时间
   AI_GENERATION_MAX_TOKENS: readPositiveNumberEnv('AI_GENERATION_MAX_TOKENS', 4096), // 正文含7个部分，2400偏小容易触发长度截断；总时长仍由墙钟预算兜底
   AI_ANALYSIS_MAX_TOKENS: readPositiveNumberEnv('AI_ANALYSIS_MAX_TOKENS', 2200), // 限制分析响应长度

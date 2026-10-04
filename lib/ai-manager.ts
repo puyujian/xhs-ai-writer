@@ -524,6 +524,9 @@ export class AIManager {
         let timedOut = false;
         let retrySameModel = false;
         let attemptHadContent = false;
+        // 思考型模型可能长时间只输出 reasoning（不转发给用户），用独立预算避免首段预算被全部吃掉。
+        let reasoningCharacters = 0;
+        let reasoningStartedAt = 0;
         attemptedModels.push(currentModel);
 
         const wait = <T>(work: Promise<T>, timeoutMs: number, message: string) =>
@@ -561,14 +564,21 @@ export class AIManager {
           while (true) {
             options.signal?.throwIfAborted();
             // 建连、空 delta、reasoning 都不能重置首段/正文空闲计时。
+            const reasoningDeadline = reasoningStartedAt > 0 && !hasContent
+              ? reasoningStartedAt + CONFIG.AI_STREAM_REASONING_ONLY_TIMEOUT
+              : Number.POSITIVE_INFINITY;
             const activityDeadline = hasContent
               ? lastContentTime + CONFIG.AI_STREAM_CONTENT_IDLE_TIMEOUT
-              : firstContentDeadline;
+              : Math.min(firstContentDeadline, reasoningDeadline);
             const nextTimeout = Math.min(activityDeadline, deadline) - Date.now();
             const next = await wait(
               iterator.next(),
               nextTimeout,
-              hasContent ? 'AI正文流中断或超时' : 'AI未在首段预算内返回正文，尝试备用模型'
+              hasContent
+                ? 'AI正文流中断或超时'
+                : activityDeadline === reasoningDeadline
+                  ? 'AI思考超时仍未输出正文，尝试备用模型'
+                  : 'AI未在首段预算内返回正文，尝试备用模型'
             );
             if (next.done) break;
             const choice = next.value?.choices?.[0];
@@ -586,6 +596,14 @@ export class AIManager {
               } else {
                 leadingWhitespace = (leadingWhitespace + content).slice(-1024);
               }
+            }
+            const delta = choice?.delta as
+              | { content?: string | null; reasoning?: string | null; reasoning_content?: string | null }
+              | undefined;
+            const reasoning = delta?.reasoning || delta?.reasoning_content;
+            if (!hasContent && typeof reasoning === 'string' && reasoning.length > 0) {
+              reasoningCharacters += reasoning.length;
+              reasoningStartedAt ||= Date.now();
             }
             if (choice?.finish_reason === 'content_filter') {
               throw new Error('AI输出被上游内容过滤器中止');
@@ -606,6 +624,9 @@ export class AIManager {
           timedOut ||= /timeout|timed out|超时/i.test(lastError.name + ' ' + lastError.message);
           if (debugLoggingEnabled) {
             console.warn(`⚠️ 模型 ${currentModel} 失败: ${lastError.message}`);
+          }
+          if (!attemptHadContent && reasoningCharacters > 0) {
+            console.warn(`⚠️ 模型 ${currentModel} 失败前只输出了 ${reasoningCharacters} 字符思考内容，没有可见正文`);
           }
           // 已转发部分内容时不能重试，否则会把两份答案拼接在一起。
           if (emittedContent) break modelLoop;
