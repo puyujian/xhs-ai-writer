@@ -42,6 +42,7 @@ function stream(chunks, signal) {
         if (chunk instanceof Error) throw chunk;
         yield { choices: [{ delta: { content: chunk }, finish_reason: null }] };
       }
+      yield { choices: [{ delta: {}, finish_reason: 'stop' }] };
     },
   };
 }
@@ -245,4 +246,118 @@ test('所有模型都只输出思考内容时，错误信息说明是思考超�
   assert.equal(result.errors.length, 1);
   assert.match(result.errors[0].message, /思考超时仍未输出正文/);
   assert.match(result.errors[0].message, /实际尝试模型 \[slow\]/);
+});
+
+test('a failed model is deferred on the next warm request, then retried after cooldown', async t => {
+  const { manager, calls } = setup(t, (p, o) => p.model === 'slow'
+    ? Promise.reject(Object.assign(new Error('HTTP 404'), { status: 404 }))
+    : Promise.resolve(stream(['成功'], o.signal)));
+  assert.equal((await generate(manager)).errors.length, 0);
+  assert.equal((await generate(manager)).errors.length, 0);
+  assert.deepEqual(calls.map(c => c.model), ['slow', 'backup', 'backup']);
+  manager.streamModelCooldowns.set('slow', Date.now() - 1);
+  await generate(manager);
+  assert.deepEqual(calls.slice(3).map(c => c.model), ['slow', 'backup']);
+});
+
+test('deferred models remain available when a healthy model fails', async t => {
+  const { manager, calls } = setup(t, (p, o) => p.model === 'backup'
+    ? Promise.reject(Object.assign(new Error('HTTP 503'), { status: 503 }))
+    : Promise.resolve(stream(['恢复的模型'], o.signal)));
+  manager.streamModelCooldowns.set('slow', Date.now() + 60000);
+  const result = await generate(manager);
+  assert.deepEqual(calls.map(c => c.model), ['backup', 'slow']);
+  assert.equal(result.errors.length, 0);
+  assert.equal(manager.streamModelCooldowns.has('slow'), false);
+});
+
+test('cancellation and content filtering never poison model health', async t => {
+  const { manager } = setup(t, () => Promise.resolve({ async *[Symbol.asyncIterator]() {
+    yield { choices: [{ delta: {}, finish_reason: 'content_filter' }] };
+  } }), 'slow');
+  await generate(manager);
+  assert.equal(manager.streamModelCooldowns.size, 0);
+  await generate(manager, 400, { signal: AbortSignal.abort() });
+  assert.equal(manager.streamModelCooldowns.size, 0);
+});
+
+test('stop finishes a normal answer without waiting for a hanging proxy EOF', async t => {
+  const { manager, calls } = setup(t, (p, o) => Promise.resolve({ async *[Symbol.asyncIterator]() {
+    yield { choices: [{ delta: { content: '完整正文' }, finish_reason: 'stop' }] };
+    await hangUntilAbort(o.signal);
+  } }));
+  const result = await generate(manager);
+  assert.deepEqual(result.chunks, ['完整正文']);
+  assert.equal(result.errors.length, 0);
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].options.signal.aborted);
+});
+
+test('upstream EOF without a finish reason retains partial content and reports truncation once', async t => {
+  const { manager, calls } = setup(t, () => Promise.resolve({ async *[Symbol.asyncIterator]() {
+    yield { choices: [{ delta: { content: '部分正文' }, finish_reason: null }] };
+  } }));
+  const result = await generate(manager);
+  assert.deepEqual(result.chunks, ['部分正文']);
+  assert.equal(calls.length, 1);
+  assert.equal(result.errors.length, 1);
+  assert.match(result.errors[0].message, /提前结束/);
+});
+
+test('connection, reasoning and idle timeouts preserve their cause despite synchronous abort rejection', async t => {
+  for (const [kind, expected] of [['connection', /连接超时/], ['reasoning', /思考超时/], ['idle', /正文流中断或超时/]]) {
+    const { manager, calls } = setup(t, (p, o) => {
+      if (kind === 'connection') return hangUntilAbort(o.signal);
+      return Promise.resolve({ async *[Symbol.asyncIterator]() {
+        yield { choices: [{ delta: kind === 'reasoning' ? { reasoning_content: 'thinking' } : { content: '正文' } }] };
+        await hangUntilAbort(o.signal);
+      } });
+    }, 'slow');
+    const result = await generate(manager);
+    assert.equal(result.errors.length, 1);
+    assert.match(result.errors[0].message, expected);
+    assert.ok(calls[0].options.signal.aborted);
+  }
+});
+
+test('JSON response validation rejects primitives and arrays without TypeError or raw output logging', async t => {
+  const { manager } = setup(t, () => {});
+  const logs = [];
+  for (const level of ['log', 'warn', 'error']) t.mock.method(console, level, (...args) => logs.push(args.join(' ')));
+  manager.validateJsonResponse('{"secret":"user-private-sentinel", invalid}', ['ok']);
+  for (const content of ['null', 'true', '123', '"private text"', '[]', '{invalid']) {
+    const result = manager.validateJsonResponse(content, ['ok']);
+    assert.equal(result.isValid, false);
+    assert.equal(result.data, null);
+    assert.match(result.errors[0], /JSON对象/);
+  }
+  assert.equal(manager.validateJsonResponse('{"ok":true}', ['ok']).isValid, true);
+  assert.doesNotMatch(logs.join('\n'), /user-private-sentinel|private text|原始内容/);
+});
+
+test('pre-cancelled analysis never calls upstream', async t => {
+  const { manager, calls } = setup(t, () => { throw new Error('must not call'); });
+  await assert.rejects(manager.analyzeWithRetry('prompt', ['ok'], 400, { signal: AbortSignal.abort() }), { name: 'AbortError' });
+  assert.equal(calls.length, 0);
+});
+
+test('cancelling pending analysis aborts its request and skips retries', async t => {
+  const { manager, calls } = setup(t, (p, o) => hangUntilAbort(o.signal));
+  const controller = new AbortController();
+  const work = manager.analyzeWithRetry('prompt', ['ok'], 400, { signal: controller.signal });
+  controller.abort();
+  await assert.rejects(work, { name: 'AbortError' });
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].options.signal.aborted);
+});
+
+test('cancelling analysis during backoff prevents a new request', async t => {
+  const { manager, calls } = setup(t, () => Promise.reject(new Error('network failure')));
+  manager.setRetryConfig({ baseDelay: 200 });
+  const controller = new AbortController();
+  const work = manager.analyzeWithRetry('prompt', ['ok'], 400, { signal: controller.signal });
+  const timer = setTimeout(() => controller.abort(), 5);
+  t.after(() => clearTimeout(timer));
+  await assert.rejects(work, { name: 'AbortError' });
+  assert.equal(calls.length, 1);
 });

@@ -29,6 +29,7 @@ test('real SDK: hanging first model is aborted, backup SSE streams successfully'
     }
     res.writeHead(200, { 'Content-Type': 'text/event-stream' });
     res.write(`data: ${JSON.stringify({ id: 'test', choices: [{ index: 0, delta: { content: '真实SDK备用正文' }, finish_reason: null }] })}\n\n`);
+    res.write(`data: ${JSON.stringify({ id: 'test', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\n`);
     res.end('data: [DONE]\n\n');
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -50,4 +51,22 @@ test('real SDK: hanging first model is aborted, backup SSE streams successfully'
   // Request close notification can be delivered after the fallback response.
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(abandoned, true);
+});
+
+test('real SDK: EOF after content without finish_reason is not success', async t => {
+  const originalModel = process.env.AI_MODEL_NAME;
+  process.env.AI_MODEL_NAME = 'mock';
+  t.after(() => {
+    if (originalModel === undefined) delete process.env.AI_MODEL_NAME; else process.env.AI_MODEL_NAME = originalModel;
+  });
+  const manager = new AIManager();
+  manager.client = new OpenAI({ apiKey: 'local-test-only', maxRetries: 0, fetch: async () => new Response(
+    `data: ${JSON.stringify({ id: 'test', choices: [{ index: 0, delta: { content: '截断的正文' }, finish_reason: null }] })}\n\n`,
+    { headers: { 'Content-Type': 'text/event-stream' } }
+  ) });
+  const output = [], errors = [];
+  await manager.generateStreamWithRetry('test', c => output.push(c), e => errors.push(e));
+  assert.deepEqual(output, ['截断的正文']);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0].message, /提前结束/);
 });

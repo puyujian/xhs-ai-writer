@@ -82,3 +82,41 @@ test('cancelling the reader releases a pending read and upstream resources', asy
   assert.equal(cancelled, true);
   assert.equal(body.locked, false);
 });
+
+test('heading-like explanation lists are not confirmed at token boundaries', () => {
+  const preamble = '我会这样处理：\n1. 标题创作建议：使用疑问句\n2. 正文建议：讲故事\n\n';
+  const answer = '## 1. 爆款标题创作\n真正答案';
+  const source = preamble + answer;
+  for (let i = 1; i < source.length; i++) {
+    assert.equal(opening([source.slice(0, i), source.slice(i)]), answer);
+  }
+  assert.equal(opening(Array.from(source)), answer);
+  assert.equal(opening(['前言\n1. 标题']), '## 1. 标题');
+});
+
+test('SSE line limits are enforced before forwarding, independent of read chunk size', async () => {
+  const oversized = 'data: ' + JSON.stringify({ content: 'x'.repeat(1024 * 1024 + 128) }) + '\n\ndata: [DONE]\n\n';
+  for (const split of [oversized.length, 65536]) {
+    const output = [];
+    await assert.rejects(readGenerationStream(bytes(oversized, split), c => output.push(c)), /响应过大/);
+    assert.equal(output.length, 0);
+  }
+  // The limit is per line, not per stream: ordinary small events can exceed it in total.
+  const chunk = 'x'.repeat(10000);
+  const wire = ('data: ' + JSON.stringify({ content: chunk }) + '\n\n').repeat(110) + 'data: [DONE]\n\n';
+  let size = 0;
+  await readGenerationStream(bytes(wire, 65536), c => { size += c.length; });
+  assert.equal(size, chunk.length * 110);
+});
+
+test('the actual prompt heading with a title count streams before completion at every token boundary', () => {
+  for (const suffix of ['(3个)', '（3个）']) {
+    const answer = `## 1. 爆款标题创作${suffix}\n标题正文`;
+    const source = '说明列表\n1. 标题创作建议：先思考\n' + answer;
+    for (let i = 1; i < source.length; i++) assert.equal(opening([source.slice(0, i), source.slice(i)]), answer);
+    const start = new GenerationContentStart();
+    const output = Array.from(source).map(c => start.push(c)).join('');
+    assert.equal(output, answer);
+    assert.equal(start.finish(), '');
+  }
+});

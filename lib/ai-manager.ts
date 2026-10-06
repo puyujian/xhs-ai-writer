@@ -16,7 +16,7 @@ const debugLoggingEnabled = process.env.ENABLE_DEBUG_LOGGING === 'true';
  */
 interface ValidationResult {
   isValid: boolean;
-  data: any;
+  data: Record<string, any> | null;
   errors: string[];
 }
 
@@ -44,6 +44,19 @@ interface AICallOptions {
  */
 export class AIManager {
   private client: OpenAI | null = null;
+  // 仅在当前暖实例暂缓不健康的流式模型；保留全部模型，其他模型失败时仍可兜底。
+  private streamModelCooldowns = new Map<string, number>();
+
+  private getStreamModelList(): string[] {
+    const models = this.getModelList();
+    const now = Date.now();
+    for (const [model, until] of Array.from(this.streamModelCooldowns.entries())) {
+      if (until <= now || !models.includes(model)) this.streamModelCooldowns.delete(model);
+    }
+    return models.filter(model => !this.streamModelCooldowns.has(model))
+      .concat(models.filter(model => this.streamModelCooldowns.has(model))
+        .sort((a, b) => this.streamModelCooldowns.get(a)! - this.streamModelCooldowns.get(b)!));
+  }
   // 优化重试配置：减少重试次数和延迟，避免超时
   private retryConfig: RetryConfig = {
     maxRetries: 1, // 从 2 次降低到 1 次，减少总等待时间
@@ -103,8 +116,21 @@ export class AIManager {
   /**
    * 延迟函数
    */
-  private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+  private delay(ms: number, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    return new Promise((resolve, reject) => {
+      const abort = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', abort);
+        reject(signal?.reason);
+      };
+      const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', abort);
+        resolve();
+      }, ms);
+      signal?.addEventListener('abort', abort, { once: true });
+      if (signal?.aborted) abort();
+    });
   }
 
   /**
@@ -125,8 +151,9 @@ export class AIManager {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => {
-        onTimeout?.();
+        // 先确定超时结果，再中止底层请求，避免同步 AbortError 抢走具体超时原因。
         reject(new Error(message));
+        onTimeout?.();
       }, timeoutMs);
     });
 
@@ -153,13 +180,12 @@ export class AIManager {
     // 添加调试信息
     if (debugLoggingEnabled) {
       console.log(`🔍 AI响应内容长度: ${content.length} 字符`);
-      console.log(`🔍 AI响应前100字符: ${content.substring(0, 100)}...`);
     }
 
     const parsed: any = safeJsonParse(content, null);
-    if (parsed === null) {
-      errors.push('AI返回的不是有效的JSON格式');
-      console.error('❌ JSON解析失败，原始内容:', content);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      errors.push('AI返回的不是有效的JSON对象');
+      // 不记录原始模型输出，避免素材和第三方响应进入生产日志。
       return { isValid: false, data: null, errors };
     }
 
@@ -330,6 +356,7 @@ export class AIManager {
     overallTimeoutMs: number = CONFIG.VERCEL_SAFE_TIMEOUT,
     options: AICallOptions = {}
   ): Promise<any> {
+    options.signal?.throwIfAborted();
     const modelList = this.getModelList();
     let lastError: Error | null = null;
     const startTime = Date.now();
@@ -341,6 +368,7 @@ export class AIManager {
 
       // 对每个模型进行重试
       for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
+        options.signal?.throwIfAborted();
         // 检查剩余时间
         const remainingTime = getRemainingTime();
         if (remainingTime <= CONFIG.AI_TIMEOUT_RESPONSE_BUFFER) {
@@ -384,10 +412,11 @@ export class AIManager {
             remainingTime - CONFIG.AI_TIMEOUT_RESPONSE_BUFFER
           );
           const controller = new AbortController();
+          const requestSignal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
           const response = await this.runWithTimeout(
             client.chat.completions.create(requestParams, {
               timeout: requestTimeout,
-              signal: controller.signal,
+              signal: requestSignal,
             }),
             requestTimeout,
             `AI分析请求超时（${Math.round(requestTimeout / 1000)}秒）`,
@@ -404,16 +433,11 @@ export class AIManager {
             console.error('📊 模型:', currentModel);
             console.error('📊 尝试次数:', attempt + 1);
 
-            // 只在调试模式下输出完整响应，避免日志过长
-            if (debugLoggingEnabled && response) {
-              console.error('📄 完整响应:', JSON.stringify(response, null, 2));
-            }
-
             throw new Error(`AI响应结构异常，缺少choices字段或choices为空数组 (模型: ${currentModel}, 尝试: ${attempt + 1})`);
           }
 
           const content = response.choices[0]?.message?.content;
-          if (!content || content.trim() === '') {
+          if (typeof content !== 'string' || content.trim() === '') {
             // 检查finish_reason来提供更详细的错误信息
             const finishReason = response.choices[0]?.finish_reason;
             if (finishReason === 'length') {
@@ -437,6 +461,7 @@ export class AIManager {
           return validation.data;
 
         } catch (error) {
+          options.signal?.throwIfAborted();
           lastError = error instanceof Error ? error : new Error(String(error));
 
           if (debugLoggingEnabled) {
@@ -449,7 +474,7 @@ export class AIManager {
             if (debugLoggingEnabled) {
               console.log(`⏳ 等待 ${delayMs}ms 后重试...`);
             }
-            await this.delay(delayMs);
+            await this.delay(delayMs, options.signal);
           }
         }
       }
@@ -493,7 +518,7 @@ export class AIManager {
     overallTimeoutMs: number = CONFIG.VERCEL_SAFE_TIMEOUT,
     options: AICallOptions = {}
   ): Promise<void> {
-    const modelList = this.getModelList();
+    const modelList = this.getStreamModelList();
     const attemptedModels: string[] = [];
     let lastError: Error = new Error('没有足够的执行时间启动生成');
     let emittedContent = false;
@@ -580,7 +605,10 @@ export class AIManager {
                   ? 'AI思考超时仍未输出正文，尝试备用模型'
                   : 'AI未在首段预算内返回正文，尝试备用模型'
             );
-            if (next.done) break;
+            if (next.done) {
+              if (hasContent) throw new Error('AI正文流提前结束，未收到完成标记');
+              break;
+            }
             const choice = next.value?.choices?.[0];
             const content = choice?.delta?.content;
             if (typeof content === 'string' && content.length > 0) {
@@ -614,9 +642,12 @@ export class AIManager {
               console.warn(`⚠️ 模型 ${currentModel} 达到输出长度上限，保留已生成内容`);
               break;
             }
+            // finish_reason 已标记终止时不再等待代理关闭连接，否则正常答案可能被误报空闲超时。
+            if (choice?.finish_reason === 'stop' || choice?.finish_reason === 'tool_calls' || choice?.finish_reason === 'function_call') break;
           }
           if (!hasContent) throw new Error('AI没有返回任何正文内容');
           if (debugLoggingEnabled) console.log(`✅ 流式生成成功 (模型: ${currentModel})`);
+          this.streamModelCooldowns.delete(currentModel);
           return;
         } catch (error) {
           if (options.signal?.aborted) return;
@@ -633,6 +664,12 @@ export class AIManager {
           const status = (error as { status?: number } | null)?.status;
           const permanentError = error instanceof BusinessError && !error.canRetry;
           if (permanentError) break modelLoop;
+          // 内容过滤与用户取消是请求特有事件，不应使整个模型进入冷却。
+          const unhealthyModel = timedOut || status === 404 || status === 429 || (status !== undefined && status >= 500) ||
+            /长度上限.*没有返回正文|没有返回任何正文/.test(lastError.message);
+          if (unhealthyModel) {
+            this.streamModelCooldowns.set(currentModel, Date.now() + CONFIG.AI_STREAM_MODEL_COOLDOWN);
+          }
           const delayMs = this.calculateDelay(attempt);
           const reserveForFallback = (modelsLeft - 1) * minimumAttemptMs;
           // 只在“没有产生任何内容且看起来是连接类错误”时重试同一模型；
@@ -685,6 +722,7 @@ export class AIManager {
    */
   resetClient(): void {
     this.client = null;
+    this.streamModelCooldowns.clear();
   }
 
 

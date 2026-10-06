@@ -117,7 +117,7 @@ export function safeJsonParse<T>(jsonString: string, defaultValue: T): T {
     // 首先尝试直接解析
     return JSON.parse(jsonString);
   } catch (error) {
-    console.warn('JSON解析失败，尝试修复:', error);
+    // 可修复的格式偏差不算错误；不记录异常对象，解析错误可能包含原始素材。
 
     try {
       // 尝试修复常见的JSON格式问题
@@ -143,12 +143,11 @@ export function safeJsonParse<T>(jsonString: string, defaultValue: T): T {
       // 4. 移除末尾的逗号
       fixedJson = fixedJson.replace(/,(\s*[}\]])/g, '$1');
 
-      console.log('🔧 尝试解析修复后的JSON...');
+      if (process.env.ENABLE_DEBUG_LOGGING === 'true') console.log('🔧 尝试解析修复后的JSON...');
       return JSON.parse(fixedJson);
 
     } catch (fixError) {
-      console.error('JSON修复也失败了:', fixError);
-      console.log('原始内容:', jsonString.substring(0, 500) + '...');
+      console.warn('JSON响应格式无法修复，返回默认值');
       return defaultValue;
     }
   }

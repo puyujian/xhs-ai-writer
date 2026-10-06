@@ -193,6 +193,8 @@ export async function POST(request: Request) {
         };
         const fail = (error: Error) => {
           if (streamClosed || generationController.signal.aborted) return;
+          // 非标准标题的文本可能仍在 opening 缓冲内；失败时也保留部分答案。
+          sendContent(opening.finish());
           console.error('Stream error:', error);
           const message = error instanceof BusinessError
             ? `${error.userMessage}。${error.suggestion}`

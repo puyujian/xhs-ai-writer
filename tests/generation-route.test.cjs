@@ -104,3 +104,16 @@ test('cron stays fail-closed when the secret is missing or invalid', async t => 
   process.env.CRON_SECRET = 'test-only-secret';
   assert.equal((await GET(new Request('http://localhost/api/cron/clean-cache'))).status, 401);
 });
+
+test('a failed generation flushes buffered nonstandard partial content before its error', async t => {
+  let partial;
+  mock(t, async (prompt, chunk, error) => {
+    chunk(partial);
+    error(new BusinessError('broken stream', '生成中断，已保留部分内容', '请重试', true));
+  });
+  for (partial of ['没有标题标记，但正文不能消失', '## 1. 标题\n部分正文']) {
+    const chunks = [];
+    await assert.rejects(readGenerationStream((await POST(request())).body, c => chunks.push(c)), /已保留部分内容/);
+    assert.equal(chunks.join(''), partial);
+  }
+});

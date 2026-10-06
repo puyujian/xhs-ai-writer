@@ -11,6 +11,7 @@ export async function readGenerationStream(
   let completed = false;
 
   const readLine = (line: string) => {
+    if (line.length > 1024 * 1024) throw new Error('生成响应过大，请重试');
     if (!line.startsWith('data:')) return; // SSE comments/heartbeat
     const data = line.slice(5).trim();
     if (data === '[DONE]') {
