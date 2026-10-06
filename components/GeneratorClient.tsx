@@ -209,10 +209,10 @@ export default function GeneratorClient() {
                 </div>
               </CardTitle>
               <CardDescription className="text-base sm:text-lg text-gray-600 mt-4 font-medium text-center">
-                <div className="flex items-center justify-center gap-2">
-                  <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse"></div>
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" aria-hidden="true"></span>
                   {UI_CONFIG.description}
-                </div>
+                </span>
               </CardDescription>
             </CardHeader>
             

@@ -66,4 +66,10 @@ GitHub master 与生产部署均已同步（`0f05876` 首轮修复、`f3a0b37` �
 - `npm test`：52/52通过（此前37项）；包含真实 OpenAI SDK 模拟上游、模型冷却/恢复、截断EOF、部分内容刷新、超时竞争、标题逐字符切分、大SSE行和分析取消。
 - `npm run lint`、`npx tsc --noEmit`、`npm run build`、`git diff --check`：通过。
 - 本轮用户已明确授权测试通过后推送 master，由 Vercel 自动上线；未修改线上密钥、权限、模型配置或付费设置。
-- 生产发布及浏览器生成验证将在部署完成后追加结果；本地测试不能替代真实线上效果和后续错误率观察。
+- 流式修复已发布：提交 `3fd194e`，生产部署 `dpl_DQJ5aWU71gdPritNC1jczoe98wec` READY，别名包含 `xhs.yujian.de`。真实浏览器提交“周末散步”后显示标题、正文及“生成完成”，日志确认 deepseek-v4-flash 无正文后 grok-4.7 成功；这仍是单次验证，不代表线上错误率已下降。
+
+### 补充：首页水合错误
+- 真实浏览器加载首页发现 React #418 / #423；独立本地开发会话复现明确错误：`<div> cannot be a descendant of <p>`，SSR HTML 被浏览器自动重排后导致水合失败。
+- 根因是 `GeneratorClient.tsx` 在渲染为 `<p>` 的 `CardDescription` 内嵌套了两层 `<div>`。已改为合法 `<span>`，保留样式和功能，没有使用 suppressHydrationWarning 隐藏问题。
+- 添加首页描述节点 JSX 结构回归检查；最终 `npm test` 53/53、Lint、TypeScript、生产构建、diff检查均通过。
+- 新建独立浏览器会话验证本地修复后：首页正常、page errors为空、console error/warning为空。生产首页将在这次补充修复部署 READY 后复查。
